@@ -10,7 +10,7 @@ function ShellSkeleton() {
   return (
     <div className="flex min-h-screen bg-bg" role="status" aria-label="Loading your workspace">
       <aside className="hidden w-64 shrink-0 border-r border-border bg-surface lg:block">
-        <div className="flex h-16 items-center border-b border-border px-5"><Logo product="Bank admin" /></div>
+        <div className="flex h-16 items-center border-b border-border px-5"><Logo product="Admin" /></div>
         <div className="space-y-3 p-5">{Array.from({ length: 9 }, (_, i) => <Skeleton key={i} className="h-4 w-3/4" />)}</div>
       </aside>
       <div className="flex-1">
@@ -31,7 +31,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       fallback={<ShellSkeleton />}
       onError={(e) => (
         <div className="mx-auto max-w-lg px-6 py-24">
-          <Logo product="Bank admin" />
+          <Logo product="Admin" />
           <div className="mt-8"><ErrorAlert error={e} title="The portal could not load your session" /></div>
           <Button className="mt-4" onClick={() => window.location.reload()}>Reload</Button>
         </div>

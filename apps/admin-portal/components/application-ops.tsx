@@ -234,7 +234,7 @@ export function Milestones({ app }: { app: AppDetail }) {
   const steps: Array<{ label: string; state: 'done' | 'current' | 'todo' | 'failed'; detail: string; note: string }> = [
     { label: 'Eligibility', note: 'Indicative only', state: reached.has('ELIGIBLE') ? 'done' : 'todo', detail: app.amounts.eligible ? formatNaira(app.amounts.eligible, { noKobo: true }) : reached.has('ELIGIBLE') ? 'Eligible' : 'Not yet' },
     { label: 'Submitted to ARAF', note: 'Not approval', state: app.araf?.status === 'ACKNOWLEDGED' || reached.has('ARAF_SUBMITTED') ? 'done' : app.araf ? 'current' : 'todo', detail: app.araf?.reference ?? (app.araf ? humanize(app.araf.status) : 'Not yet') },
-    { label: 'Approved', note: 'ARAF decision', state: reached.has('FINANCING_APPROVED') ? 'done' : app.status === 'DECLINED' ? 'failed' : 'todo', detail: reached.has('FINANCING_APPROVED') ? 'Financing approved' : app.status === 'DECLINED' ? 'Declined' : 'Not yet' },
+    { label: 'Approved', note: 'ARAF decision', state: reached.has('FINANCING_APPROVED') ? 'done' : app.status === 'DECLINED' ? 'failed' : 'todo', detail: reached.has('FINANCING_APPROVED') ? 'Approved' : app.status === 'DECLINED' ? 'Declined' : 'Not yet' },
     { label: 'Booked', note: 'Core banking', state: app.booking?.status === 'BOOKED' ? 'done' : app.booking?.status === 'FAILED' ? 'failed' : app.booking ? 'current' : 'todo', detail: app.booking?.reference ?? (app.booking ? humanize(app.booking.status) : 'Not yet') },
     { label: 'Payment initiated', note: 'Instruction (maker)', state: anyPayment ? (anyPayment.status === 'FAILED' ? 'failed' : 'done') : 'todo', detail: anyPayment ? `${anyPayment.reference} · ${humanize(anyPayment.status)}` : 'Not yet' },
     { label: 'Payment confirmed', note: 'Authoritative source', state: confirmed?.authoritative ? 'done' : confirmed ? 'current' : 'todo', detail: confirmed ? (confirmed.authoritative ? 'Confirmed' : 'Not authoritative') : 'Not yet' },
@@ -242,7 +242,7 @@ export function Milestones({ app }: { app: AppDetail }) {
     { label: 'Delivered', note: 'Merchant / customer', state: reached.has('GOODS_DELIVERED') ? 'done' : reached.has('GOODS_DISPATCHED') ? 'current' : 'todo', detail: reached.has('GOODS_DELIVERED') ? 'Delivered' : reached.has('GOODS_DISPATCHED') ? 'Dispatched' : 'Not yet' },
   ];
   return (
-    <ol className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4 xl:grid-cols-8" aria-label="Financing milestones">
+    <ol className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4 2xl:grid-cols-8" aria-label="Financing milestones">
       {steps.map((s, i) => (
         <li key={s.label} className="relative bg-surface px-3.5 py-3">
           <span className={cn('absolute inset-x-0 top-0 h-[3px]', s.state === 'done' ? 'bg-success' : s.state === 'current' ? 'bg-gold' : s.state === 'failed' ? 'bg-danger' : 'bg-transparent')} aria-hidden="true" />
@@ -252,7 +252,7 @@ export function Milestones({ app }: { app: AppDetail }) {
             </span>
             {s.label}
           </p>
-          <p className={cn('mt-1.5 truncate text-sm', s.state === 'todo' ? 'text-subtle' : 'font-medium text-fg')} title={s.detail}>{s.detail}</p>
+          <p className={cn('mt-1.5 break-words text-[13px] leading-snug', s.state === 'todo' ? 'text-subtle' : 'font-medium text-fg')}>{s.detail}</p>
           <p className="text-2xs text-subtle">{s.note}</p>
           <span className="sr-only">{s.state === 'done' ? 'Completed' : s.state === 'current' ? 'In progress' : s.state === 'failed' ? 'Failed or blocked' : 'Not reached'}</span>
         </li>

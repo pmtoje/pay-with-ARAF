@@ -71,8 +71,8 @@ function Simulator() {
                 <section key={stage} aria-label={`${humanize(stage)} (${col.length})`} className="flex min-h-[18rem] flex-col rounded-lg border border-border bg-surface-2/60">
                   <header className="flex items-center justify-between border-b border-border px-3 py-2.5">
                     <div className="min-w-0">
-                      <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-fg">{humanize(stage)}</h2>
-                      <p className="truncate text-2xs text-subtle">{STAGE_HELP[stage]}</p>
+                      <h2 className="text-xs font-semibold uppercase leading-tight tracking-wide text-fg">{humanize(stage)}</h2>
+                      <p className="text-2xs text-subtle">{STAGE_HELP[stage]}</p>
                     </div>
                     <span className="rounded-sm bg-surface px-1.5 text-xs font-semibold tabular-nums text-muted">{col.length}</span>
                   </header>

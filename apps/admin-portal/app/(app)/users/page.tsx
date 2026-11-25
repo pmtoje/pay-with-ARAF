@@ -56,7 +56,7 @@ function Users() {
                     { key: 's', header: 'Status', sortValue: (u) => u.status, cell: (u) => <StatusBadge status={u.status} /> },
                     {
                       key: 'x', header: <span className="sr-only">Actions</span>, cell: (u) => u.id === me.user.id ? <span className="text-xs text-subtle">Managed by another officer</span> : (
-                        <div className="flex flex-wrap justify-end gap-1.5">
+                        <div className="flex flex-nowrap justify-end gap-1 whitespace-nowrap">
                           <Button size="sm" variant="secondary" onClick={() => setRoleFor(u)}>Change roles</Button>
                           <Button size="sm" variant="ghost" onClick={() => setStatusFor(u)}>{u.status === 'SUSPENDED' ? 'Reactivate' : 'Suspend'}</Button>
                           <Button size="sm" variant="ghost" onClick={() => setRevokeFor(u)}>Revoke sessions</Button>

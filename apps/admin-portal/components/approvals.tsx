@@ -57,7 +57,7 @@ function resourceLink(a: Approval): { href: string; label: string } | null {
   if (a.type === 'CREDIT_POLICY') return { href: '/policy', label: 'Open credit policy' };
   if (a.type === 'ROLE_ASSIGNMENT') return { href: '/users', label: 'Open users & roles' };
   if (a.type === 'VENDOR_PAYMENT' || a.type === 'REFUND') {
-    const ref = (a.payload?.application as string | undefined) ?? a.summary.match(/APP-[A-Z0-9-]+/)?.[0];
+    const ref = (a.payload?.application as string | undefined) ?? a.summary.match(/ARAF-\d{4}-\d+/)?.[0];
     return ref ? { href: `/applications?search=${encodeURIComponent(ref)}`, label: `Find application ${ref}` } : null;
   }
   if (a.partner_id) return { href: `/partners/${a.partner_id}`, label: 'Open partner' };
@@ -79,7 +79,7 @@ export function ApprovalDialog({ approval, onClose, onDecided }: { approval: App
   if (!approval) return null;
   const a = approval;
   const meta = APPROVAL_TYPES[a.type];
-  const isMaker = a.maker === me.user.full_name || a.maker === me.user.id;
+  const isMaker = (a as { is_maker?: boolean }).is_maker ?? (a as { maker_id?: string }).maker_id === me.user.id;
   const lacks = meta && !can(meta.permission);
   const blockedReason = a.status !== 'PENDING'
     ? null

@@ -132,6 +132,8 @@ export class ApprovalsService {
       summary: r.summary,
       status: r.status,
       maker: users.get(r.makerId) ?? r.makerId,
+      maker_id: r.makerId,
+      is_maker: r.makerId === actor.id,
       maker_comment: r.makerComment,
       checker: r.checkerId ? users.get(r.checkerId) ?? r.checkerId : null,
       checker_comment: r.checkerComment,

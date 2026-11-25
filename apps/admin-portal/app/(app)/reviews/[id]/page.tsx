@@ -69,7 +69,7 @@ function Review() {
         <div className="space-y-6 xl:col-span-3">
           <Section title="Customer form answers" description="Submitted by the customer in the enhanced assessment form.">
             {r.form && Object.keys(r.form).length ? (
-              <KeyValue items={Object.entries(r.form).map(([k, v]) => ({ label: humanize(k), value: formValue(v) }))} />
+              <KeyValue items={Object.entries(r.form).map(([k, v]) => ({ label: humanize(k.replace(/_naira$/, '')) + (k.endsWith('_naira') ? ' (₦)' : ''), value: k.endsWith('_naira') && typeof v === 'number' ? formatNaira(v * 100, { noKobo: true }) : typeof v === 'string' && /^[A-Z_]+$/.test(v) ? humanize(v) : formValue(v) }))} />
             ) : <p className="text-sm text-muted">The customer has not submitted the form yet.</p>}
           </Section>
           <Section title="Credit summary (SeedFi)">

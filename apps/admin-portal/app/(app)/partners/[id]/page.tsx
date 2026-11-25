@@ -129,6 +129,7 @@ function Partner() {
                   <StatusAction show={['SANDBOX_ACTIVE', 'PRODUCTION_PENDING', 'PRODUCTION_ACTIVE'].includes(p.status)} allowed={can('partner.suspend')} label="Suspend partner" perm="partner.suspend" onClick={() => setAct('suspend')} help="Takes effect immediately; API credentials are suspended." danger />
                   <StatusAction show={p.status === 'SUSPENDED'} allowed={can('partner.suspend')} label="Request reactivation" perm="partner.suspend" onClick={() => setAct('reactivate')} help="Creates a reactivation request for a checker." />
                   <StatusAction show={p.status === 'SANDBOX_ACTIVE'} allowed={can('partner.production.request')} label="Request production activation" perm="partner.production.request" onClick={() => setAct('production')} help="Approval is locked while live operations are disabled." />
+                  {!(canSubmit || canSuspend || canReactivate || canProduction) && !['UNDER_REVIEW', 'SUBMITTED', 'REJECTED', 'TERMINATED'].includes(p.status) && <p className="flex items-start gap-2 text-muted">{Icon.lock()} Your roles do not include a status action for a partner in this state.</p>}
                   {['UNDER_REVIEW', 'SUBMITTED'].includes(p.status) && <p className="text-muted">Awaiting a Partner Approving Officer’s decision in the Approvals inbox.</p>}
                   {['REJECTED', 'TERMINATED'].includes(p.status) && <p className="text-muted">This partner is {humanize(p.status).toLowerCase()}. No further status actions are available.</p>}
                 </div>
@@ -272,14 +273,14 @@ function Partner() {
 }
 
 function StatusAction({ show, allowed, label, perm, onClick, help, danger }: { show: boolean; allowed: boolean; label: string; perm: string; onClick: () => void; help: string; danger?: boolean }) {
-  if (!show) return null;
+  if (!show || !allowed) return null;
   return (
     <div className="rounded-md border border-border p-3">
       <div className="flex items-center justify-between gap-3">
         <p className="font-medium">{label}</p>
-        <Button size="sm" variant={danger ? 'danger' : 'secondary'} disabled={!allowed} onClick={onClick}>{allowed ? 'Start' : 'No access'}</Button>
+        <Button size="sm" className="shrink-0" variant={danger ? 'danger' : 'secondary'} onClick={onClick}>Start</Button>
       </div>
-      <p className="mt-1 text-xs text-muted">{allowed ? help : <>Requires <Mono>{perm}</Mono>.</>}</p>
+      <p className="mt-1 text-xs text-muted">{help} <span className="text-subtle">({perm})</span></p>
     </div>
   );
 }

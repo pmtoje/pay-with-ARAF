@@ -315,7 +315,7 @@ export class AdminService implements OnModuleInit {
     if (!p) throw new AppError('INVALID_STATE');
     await this.providers.sandbox.payments.reverseSimulated(p.idempotencyKey);
     await this.audit.record(actor, { action: 'sandbox.payment_reversal_simulated', resourceType: 'VENDOR_PAYMENT_INSTRUCTION', resourceId: p.id });
-    return this.ops.reconcileInstruction(p.id, actor);
+    return { status: await this.ops.reconcileInstruction(p.id, actor) };
   }
 
   async decryptedSettlementAccount(accountId: string) {

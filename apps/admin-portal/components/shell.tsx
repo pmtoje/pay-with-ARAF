@@ -47,7 +47,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   );
   return (
     <AppShell
-      product="Bank admin"
+      product="Admin"
       nav={nav}
       activeHref={pathname}
       banner={me.sandbox ? <SandboxBanner note="Bank administration portal" /> : undefined}

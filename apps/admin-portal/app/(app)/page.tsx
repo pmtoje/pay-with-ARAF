@@ -89,11 +89,11 @@ function OverviewDashboard() {
             <h2 className="mb-2 text-2xs font-semibold uppercase tracking-[0.14em] text-subtle">Financing pipeline (value)</h2>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
               <Stat label="Applications" value={d.total_applications.toLocaleString('en-NG')} hint="Created in period" />
-              <Stat label="Requested" value={formatNaira(d.requested_value, { compact: true })} hint="Cart value at checkout" />
-              <Stat label="Eligible" value={formatNaira(d.eligible_value, { compact: true })} hint="Indicative — not approval" />
-              <Stat label="Approved" value={formatNaira(d.approved_value, { compact: true })} hint="ARAF approved financing" tone="gold" />
-              <Stat label="Booked" value={formatNaira(d.booked_value, { compact: true })} hint="Booked in core banking" />
-              <Stat label="Vendor paid" value={formatNaira(d.confirmed_vendor_payments, { compact: true })} hint="Confirmed by payment system" />
+              <Stat label="Requested" value={formatNaira(d.requested_value, { compact: true, noKobo: true })} hint="Cart value at checkout" />
+              <Stat label="Eligible" value={formatNaira(d.eligible_value, { compact: true, noKobo: true })} hint="Indicative — not approval" />
+              <Stat label="Approved" value={formatNaira(d.approved_value, { compact: true, noKobo: true })} hint="ARAF approved financing" tone="gold" />
+              <Stat label="Booked" value={formatNaira(d.booked_value, { compact: true, noKobo: true })} hint="Booked in core banking" />
+              <Stat label="Vendor paid" value={formatNaira(d.confirmed_vendor_payments, { compact: true, noKobo: true })} hint="Confirmed by payment system" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
@@ -177,8 +177,8 @@ function OverviewDashboard() {
                 { key: 'p', header: 'Provider', cell: (r) => <span className="font-medium">{humanize(r.provider)}</span>, sortValue: (r) => r.provider },
                 { key: 'c', header: 'Calls', align: 'right', cell: (r) => r.calls.toLocaleString('en-NG'), sortValue: (r) => r.calls },
                 { key: 'sr', header: 'Success', align: 'right', cell: (r) => <span className={r.success_rate < 0.95 ? 'text-danger' : ''}>{formatPercent(r.success_rate)}</span>, sortValue: (r) => r.success_rate },
-                { key: 'p50', header: 'p50', align: 'right', cell: (r) => `${r.p50_ms} ms` },
-                { key: 'p95', header: 'p95', align: 'right', cell: (r) => `${r.p95_ms} ms` },
+                { key: 'p50', header: 'p50', align: 'right', cell: (r) => <span className="whitespace-nowrap">{r.p50_ms} ms</span> },
+                { key: 'p95', header: 'p95', align: 'right', cell: (r) => <span className="whitespace-nowrap">{r.p95_ms} ms</span> },
                 { key: 'm', header: 'Mode', cell: (r) => (r.simulated ? <Badge tone="warning">Simulated</Badge> : <Badge tone="info">Live</Badge>) },
               ]}
             />
