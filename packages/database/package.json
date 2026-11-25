@@ -1,0 +1,27 @@
+{
+  "name": "@araf/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "seed": "node dist/seed.js",
+    "reset": "prisma migrate reset --force --skip-seed && node dist/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.0",
+    "@araf/business-rules": "workspace:*",
+    "@araf/security": "workspace:*",
+    "@araf/types": "workspace:*"
+  },
+  "devDependencies": {
+    "prisma": "6.19.0",
+    "typescript": "5.9.3",
+    "@types/node": "22.18.12"
+  }
+}

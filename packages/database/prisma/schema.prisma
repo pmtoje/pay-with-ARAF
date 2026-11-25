@@ -1,0 +1,1554 @@
+// Pay with ARAF — PostgreSQL schema
+//
+// Conventions
+// - Money: BigInt integer kobo. Never float.
+// - Tenant isolation: every partner-owned row carries partnerId AND environment.
+//   The API scopes every partner query by both (see apps/api/src/common/tenant.ts).
+// - Financial event tables (payment events, state history, audit logs, webhook events)
+//   are append-only; UPDATE/DELETE on audit_logs is blocked by a database trigger.
+// - Sensitive values are encrypted at the application layer (AES-256-GCM, *Encrypted
+//   columns) with blind indexes (*Hash) for exact-match lookup.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Environment {
+  SANDBOX
+  PRODUCTION
+}
+
+enum UserType {
+  STAFF
+  PARTNER
+}
+
+enum Portal {
+  ADMIN
+  PARTNER
+}
+
+enum PartnerStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  ADDITIONAL_INFORMATION_REQUIRED
+  APPROVED
+  SANDBOX_ACTIVE
+  PRODUCTION_PENDING
+  PRODUCTION_ACTIVE
+  SUSPENDED
+  REJECTED
+  TERMINATED
+}
+
+enum PartnerType {
+  DIRECT_MERCHANT
+  MARKETPLACE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApplicationStatus {
+  CREATED
+  IDENTITY_PENDING
+  IDENTITY_VERIFIED
+  CREDIT_CHECK_PENDING
+  CREDIT_CHECK_COMPLETED
+  ENHANCED_REVIEW_REQUIRED
+  ENHANCED_REVIEW_PENDING
+  ENHANCED_REVIEW_CLEARED
+  ACCOUNT_VERIFICATION_PENDING
+  ACCOUNT_OPENING_PENDING
+  ACCOUNT_VERIFIED
+  STATEMENT_PENDING
+  STATEMENT_RECEIVED
+  STATEMENT_VALIDATION_PENDING
+  STATEMENT_ANALYSIS_PENDING
+  STATEMENT_ANALYSIS_COMPLETED
+  AFFORDABILITY_REVIEW_REQUIRED
+  ELIGIBLE
+  OFFER_PRESENTED
+  OFFER_ACCEPTED
+  ARAF_SUBMISSION_PENDING
+  ARAF_SUBMITTED
+  ARAF_UNDER_REVIEW
+  ADDITIONAL_INFORMATION_REQUIRED
+  FINANCING_APPROVED
+  DOCUMENTATION_PENDING
+  MANDATE_PENDING
+  BOOKING_PENDING
+  FINANCING_BOOKED
+  VENDOR_PAYMENT_PENDING
+  VENDOR_PAYMENT_CONFIRMED
+  RELEASE_AUTHORIZED
+  GOODS_DISPATCHED
+  GOODS_DELIVERED
+  COMPLETED
+  DECLINED
+  CANCELLED
+  EXPIRED
+  EXCEPTION
+}
+
+enum IncomeProfile {
+  SALARY_EARNER
+  BUSINESS_OWNER
+}
+
+enum PaymentStatus {
+  NOT_INITIATED
+  PENDING_APPROVAL
+  INITIATED
+  PROCESSING
+  CONFIRMED
+  FAILED
+  UNKNOWN
+  REVERSED
+  RECONCILIATION_REQUIRED
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access
+// ---------------------------------------------------------------------------
+
+model User {
+  id                 String       @id @default(uuid())
+  type               UserType
+  partnerId          String?
+  partner            Partner?     @relation(fields: [partnerId], references: [id])
+  email              String       @unique
+  fullName           String
+  passwordHash       String?
+  status             String       @default("INVITED") // INVITED | ACTIVE | SUSPENDED | DEACTIVATED
+  failedLoginCount   Int          @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  mustChangePassword Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  roles              UserRole[]
+  sessions           Session[]
+  mfaCredentials     MfaCredential[]
+
+  @@index([partnerId])
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  name        String
+  scope       UserType
+  description String
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  description String
+  sensitive   Boolean          @default(false)
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  userId       String
+  roleId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role      @relation(fields: [roleId], references: [id])
+  grantedById  String?
+  approvalId   String?
+  expiresAt    DateTime? // temporary elevated access
+  createdAt    DateTime  @default(now())
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portal        Portal
+  tokenHash     String    @unique
+  csrfTokenHash String
+  mfaVerified   Boolean   @default(false)
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  revokedReason String?
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model MfaCredential {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type             String    @default("TOTP")
+  secretEncrypted  String
+  verifiedAt       DateTime?
+  lastUsedStep     BigInt?   // last accepted TOTP time-step (replay protection)
+  createdAt        DateTime  @default(now())
+
+  @@index([userId])
+  @@map("mfa_credentials")
+}
+
+model UserInvitation {
+  id          String    @id @default(uuid())
+  email       String
+  fullName    String
+  type        UserType
+  partnerId   String?
+  roleCodes   String[]
+  tokenHash   String    @unique
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
+  @@map("user_invitations")
+}
+
+/// Generic maker-checker approval request. The checker must differ from the maker.
+model ApprovalRequest {
+  id             String         @id @default(uuid())
+  reference      String         @unique
+  type           String // PARTNER_APPROVAL | PARTNER_PRODUCTION | PARTNER_CONFIG | CREDIT_POLICY | ROLE_ASSIGNMENT | VENDOR_ACCOUNT | REVIEW_DECISION | VENDOR_PAYMENT | REFUND | CREDENTIAL_PRODUCTION
+  resourceType   String
+  resourceId     String
+  partnerId      String?
+  payload        Json
+  summary        String
+  status         ApprovalStatus @default(PENDING)
+  makerId        String
+  makerComment   String?
+  checkerId      String?
+  checkerComment String?
+  createdAt      DateTime       @default(now())
+  decidedAt      DateTime?
+
+  @@index([type, status])
+  @@index([resourceType, resourceId])
+  @@map("approval_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Partners, vendors, credentials, webhooks
+// ---------------------------------------------------------------------------
+
+model Partner {
+  id                    String                 @id @default(uuid())
+  partnerCode           String                 @unique
+  registeredName        String
+  tradingName           String
+  registrationNumber    String
+  businessType          String
+  partnerType           PartnerType            @default(DIRECT_MERCHANT)
+  websiteUrl            String
+  businessAddress       String
+  businessCategory      String
+  taxIdentificationNumber String?
+  contactName           String
+  contactEmail          String
+  contactPhone          String
+  technicalContactName  String?
+  technicalContactEmail String?
+  riskClassification    String                 @default("UNCLASSIFIED")
+  status                PartnerStatus          @default(DRAFT)
+  agreementVersion      String?
+  agreementAcceptedAt   DateTime?
+  createdById           String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  users                 User[]
+  configurations        PartnerConfiguration[]
+  domains               PartnerDomain[]
+  credentials           PartnerApiCredential[]
+  webhookEndpoints      WebhookEndpoint[]
+  vendors               Vendor[]
+  statusHistory         PartnerStatusHistory[]
+
+  @@map("partners")
+}
+
+model PartnerStatusHistory {
+  id         String        @id @default(uuid())
+  partnerId  String
+  partner    Partner       @relation(fields: [partnerId], references: [id])
+  fromStatus PartnerStatus?
+  toStatus   PartnerStatus
+  actorId    String?
+  reason     String?
+  approvalId String?
+  createdAt  DateTime      @default(now())
+
+  @@index([partnerId])
+  @@map("partner_status_history")
+}
+
+model PartnerConfiguration {
+  id                          String   @id @default(uuid())
+  partnerId                   String
+  partner                     Partner  @relation(fields: [partnerId], references: [id])
+  version                     Int
+  status                      String   @default("PENDING_APPROVAL") // PENDING_APPROVAL | ACTIVE | SUPERSEDED | REJECTED
+  minTransactionKobo          BigInt
+  maxTransactionKobo          BigInt
+  permittedProducts           String[]
+  permittedTenors             Int[]
+  eligibleCategories          String[]
+  applicationExpiryMinutes    Int      @default(1440)
+  orderReservationMinutes     Int      @default(4320)
+  partialFinancingEnabled     Boolean  @default(false)
+  allowMultipleVendors        Boolean  @default(false)
+  settlementArrangement       String   @default("DIRECT_TO_VENDOR")
+  sandboxEnabled              Boolean  @default(true)
+  productionEnabled           Boolean  @default(false)
+  makerId                     String?
+  checkerId                   String?
+  approvedAt                  DateTime?
+  createdAt                   DateTime @default(now())
+
+  @@unique([partnerId, version])
+  @@index([partnerId, status])
+  @@map("partner_configurations")
+}
+
+model PartnerDomain {
+  id          String   @id @default(uuid())
+  partnerId   String
+  partner     Partner  @relation(fields: [partnerId], references: [id])
+  environment Environment
+  kind        String // WEBSITE | RETURN_URL_ORIGIN
+  value       String // origin, e.g. https://shop.example
+  approved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@unique([partnerId, environment, kind, value])
+  @@map("partner_domains")
+}
+
+model PartnerApiCredential {
+  id           String      @id @default(uuid())
+  partnerId    String
+  partner      Partner     @relation(fields: [partnerId], references: [id])
+  environment  Environment
+  name         String
+  lookupPrefix String      @unique
+  keyHash      String
+  last4        String
+  scopes       String[]
+  status       String      @default("ACTIVE") // ACTIVE | REVOKED | EXPIRED | PENDING_APPROVAL
+  ipAllowlist  String[]
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  lastUsedIp   String?
+  createdById  String?
+  revokedById  String?
+  revokedAt    DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@index([partnerId, environment])
+  @@map("partner_api_credentials")
+}
+
+model WebhookEndpoint {
+  id                        String      @id @default(uuid())
+  partnerId                 String
+  partner                   Partner     @relation(fields: [partnerId], references: [id])
+  environment               Environment
+  url                       String
+  description               String?
+  events                    String[]
+  status                    String      @default("ACTIVE") // ACTIVE | DISABLED | SUSPENDED
+  secretEncrypted           String
+  secretLast4               String
+  previousSecretEncrypted   String?
+  previousSecretExpiresAt   DateTime?
+  consecutiveFailures       Int         @default(0)
+  suspendedAt               DateTime?
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+  deliveries                WebhookDelivery[]
+
+  @@index([partnerId, environment])
+  @@map("partner_webhook_endpoints")
+}
+
+model Vendor {
+  id                 String                     @id @default(uuid())
+  partnerId          String
+  partner            Partner                    @relation(fields: [partnerId], references: [id])
+  environment        Environment
+  vendorReference    String
+  name               String
+  registrationNumber String?
+  categories         String[]
+  status             String                     @default("PENDING") // PENDING | APPROVED | SUSPENDED
+  isPartnerItself    Boolean                    @default(false)
+  createdAt          DateTime                   @default(now())
+  settlementAccounts VendorSettlementAccount[]
+
+  @@unique([partnerId, environment, vendorReference])
+  @@map("vendors")
+}
+
+model VendorSettlementAccount {
+  id                     String    @id @default(uuid())
+  vendorId               String
+  vendor                 Vendor    @relation(fields: [vendorId], references: [id])
+  bankCode               String
+  bankName               String
+  accountNumberEncrypted String
+  accountNumberMasked    String
+  accountName            String
+  verificationStatus     String    @default("UNVERIFIED") // UNVERIFIED | VERIFIED | MISMATCH
+  verifiedName           String?
+  verifiedAt             DateTime?
+  status                 String    @default("PENDING_APPROVAL") // PENDING_APPROVAL | ACTIVE | SUSPENDED | REJECTED
+  approvalId             String?
+  createdAt              DateTime  @default(now())
+
+  @@index([vendorId, status])
+  @@map("vendor_settlement_accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Customers, consent, checkout, orders
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id                String    @id @default(uuid())
+  environment       Environment
+  bvnHash           String
+  bvnEncrypted      String
+  bvnLast4          String
+  firstName         String
+  lastName          String
+  phoneMasked       String?
+  email             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  accounts          CustomerAccount[]
+
+  @@unique([environment, bvnHash])
+  @@map("customers")
+}
+
+model CustomerAccount {
+  id                     String    @id @default(uuid())
+  customerId             String
+  customer               Customer  @relation(fields: [customerId], references: [id])
+  accountNumberEncrypted String
+  accountNumberMasked    String
+  accountName            String
+  productName            String
+  status                 String
+  source                 String // EXISTING | NEWLY_OPENED
+  openedAt               DateTime?
+  verifiedAt             DateTime
+  createdAt              DateTime  @default(now())
+
+  @@unique([customerId, accountNumberMasked, productName])
+  @@map("customer_accounts")
+}
+
+model CustomerConsent {
+  id             String    @id @default(uuid())
+  applicationId  String
+  customerId     String?
+  consentType    String // IDENTITY_VERIFICATION | CREDIT_ASSESSMENT | STATEMENT_ACCESS | THIRD_PARTY_ANALYSIS | APPLICATION_PROCESSING | DATA_SHARING | FINANCING_TERMS | MANDATE | MARKETING
+  lawfulBasis    String // CONSENT | CONTRACT | LEGAL_OBLIGATION | LEGITIMATE_INTEREST
+  version        String
+  provider       String?
+  textHash       String
+  acceptedAt     DateTime  @default(now())
+  ipAddress      String?
+  userAgent      String?
+  withdrawnAt    DateTime?
+
+  @@index([applicationId])
+  @@map("customer_consents")
+}
+
+model MerchantOrder {
+  id                     String       @id @default(uuid())
+  partnerId              String
+  environment            Environment
+  merchantOrderReference String
+  currency               String       @default("NGN")
+  amountKobo             BigInt
+  customerEmail          String?
+  customerPhone          String?
+  status                 String       @default("OPEN") // OPEN | FINANCING_IN_PROGRESS | PAID | FULFILLED | CANCELLED | RETURNED
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  items                  OrderItem[]
+  checkoutSessions       CheckoutSession[]
+
+  @@unique([partnerId, environment, merchantOrderReference])
+  @@map("merchant_orders")
+}
+
+model OrderItem {
+  id              String        @id @default(uuid())
+  orderId         String
+  order           MerchantOrder @relation(fields: [orderId], references: [id])
+  sku             String
+  name            String
+  quantity        Int
+  unitAmountKobo  BigInt
+  lineAmountKobo  BigInt
+  category        String
+  vendorId        String
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model CheckoutSession {
+  id                 String        @id // cs_test_... / cs_live_...
+  partnerId          String
+  environment        Environment
+  orderId            String
+  order              MerchantOrder @relation(fields: [orderId], references: [id])
+  idempotencyKey     String?
+  status             String        @default("CREATED") // CREATED | OPEN | COMPLETED | EXPIRED | CANCELLED | SUPERSEDED
+  amountKobo         BigInt
+  currency           String        @default("NGN")
+  cartSnapshot       Json
+  cartHash           String
+  returnUrl          String
+  cancelUrl          String
+  revisesSessionId   String?
+  supersededById     String?
+  expiresAt          DateTime
+  openedAt           DateTime?
+  createdAt          DateTime      @default(now())
+  application        FinancingApplication?
+
+  @@index([partnerId, environment])
+  @@index([orderId])
+  @@map("checkout_sessions")
+}
+
+/// Browser session for the hosted customer checkout (bound to one checkout session).
+model CustomerSession {
+  id                String    @id @default(uuid())
+  applicationId     String
+  tokenHash         String    @unique
+  csrfTokenHash     String
+  authenticated     Boolean   @default(false) // OTP verified in this browser session
+  createdAt         DateTime  @default(now())
+  lastActivityAt    DateTime  @default(now())
+  expiresAt         DateTime
+  revokedAt         DateTime?
+
+  @@index([applicationId])
+  @@map("customer_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Financing application & state history
+// ---------------------------------------------------------------------------
+
+model FinancingApplication {
+  id                        String            @id @default(uuid())
+  reference                 String            @unique
+  partnerId                 String
+  environment               Environment
+  checkoutSessionId         String            @unique
+  checkoutSession           CheckoutSession   @relation(fields: [checkoutSessionId], references: [id])
+  orderId                   String
+  customerId                String?
+  status                    ApplicationStatus @default(CREATED)
+  version                   Int               @default(0)
+  incomeProfile             IncomeProfile?
+  purchaseAmountKobo        BigInt
+  eligibleAmountKobo        BigInt?
+  financingAmountKobo       BigInt?
+  contributionAmountKobo    BigInt            @default(0)
+  contributionVerified      Boolean           @default(false)
+  selectedAccountId         String?
+  vendorId                  String
+  creditPolicyVersionId     String
+  declineReasonCode         String?
+  exceptionReturnState      ApplicationStatus?
+  revisesApplicationId      String?
+  arafReference             String?
+  assignedOfficerId         String?
+  holds                     String[]
+  expiresAt                 DateTime
+  lastActivityAt            DateTime          @default(now())
+  submittedAt               DateTime?
+  completedAt               DateTime?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  @@index([partnerId, environment, status])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("financing_applications")
+}
+
+model StateTransition {
+  id            String   @id @default(uuid())
+  applicationId String?
+  machine       String // APPLICATION | PAYMENT | RELEASE | OFFER | MANDATE | BOOKING | ARAF_SUBMISSION | STATEMENT_CONNECTION | ANALYSIS_JOB | ACCOUNT_OPENING | FULFILMENT | REFUND | PARTNER
+  entityId      String
+  fromState     String?
+  toState       String
+  actorType     String // CUSTOMER | PARTNER_USER | PARTNER_API | STAFF | SYSTEM | PROVIDER
+  actorId       String?
+  reason        String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([applicationId, createdAt])
+  @@index([machine, entityId])
+  @@map("application_state_history")
+}
+
+// ---------------------------------------------------------------------------
+// Identity verification & OTP
+// ---------------------------------------------------------------------------
+
+model IdentityVerification {
+  id               String    @id @default(uuid())
+  applicationId    String
+  bvnHash          String
+  bvnLast4         String
+  status           String // PENDING | OTP_SENT | VERIFIED | FAILED | LOCKED | PROVIDER_UNAVAILABLE
+  failureCode      String?
+  providerReference String?
+  phoneMasked      String?
+  bvnEncrypted     String? // AES-GCM; needed to create the customer record after OTP
+  phoneEncrypted   String? // identity-linked phone from the BVN record (OTP channel)
+  dobEncrypted     String?
+  firstNameEnc     String?
+  lastNameEnc      String?
+  attempts         Int       @default(0)
+  createdAt        DateTime  @default(now())
+  verifiedAt       DateTime?
+
+  @@index([applicationId])
+  @@index([bvnHash, createdAt])
+  @@map("identity_verifications")
+}
+
+model OtpChallenge {
+  id                    String    @id @default(uuid())
+  purpose               String // IDENTITY | RESUME | SALE_CONTRACT | DOCUMENT_SIGNING
+  applicationId         String
+  identityVerificationId String?
+  customerSessionId     String
+  codeHash              String
+  channel               String
+  destinationMasked     String
+  attempts              Int       @default(0)
+  maxAttempts           Int       @default(5)
+  expiresAt             DateTime
+  resendAvailableAt     DateTime
+  consumedAt            DateTime?
+  invalidatedAt         DateTime?
+  createdAt             DateTime  @default(now())
+
+  @@index([applicationId, purpose])
+  @@map("otp_challenges")
+}
+
+// ---------------------------------------------------------------------------
+// Credit assessment & enhanced review
+// ---------------------------------------------------------------------------
+
+model CreditPolicy {
+  id          String                @id @default(uuid())
+  code        String                @unique
+  name        String
+  description String
+  versions    CreditPolicyVersion[]
+
+  @@map("credit_policies")
+}
+
+model CreditPolicyVersion {
+  id            String       @id @default(uuid())
+  policyId      String
+  policy        CreditPolicy @relation(fields: [policyId], references: [id])
+  version       Int
+  status        String       @default("DRAFT") // DRAFT | PENDING_APPROVAL | ACTIVE | SUPERSEDED | REJECTED
+  rules         Json
+  changeSummary String
+  isProposed    Boolean      @default(true) // true until formally approved by Credit Risk / Shariah / Legal
+  effectiveFrom DateTime?
+  makerId       String?
+  checkerId     String?
+  approvedAt    DateTime?
+  createdAt     DateTime     @default(now())
+
+  @@unique([policyId, version])
+  @@map("credit_policy_versions")
+}
+
+model CreditAssessment {
+  id                       String    @id @default(uuid())
+  applicationId            String
+  customerId               String
+  provider                 String
+  status                   String // PENDING | COMPLETED | TECHNICAL_FAILURE | INVALID_RESPONSE
+  score                    Int?
+  band                     String? // POOR | FAIR | GOOD | NO_SCORE
+  outcome                  String? // DECLINE | ENHANCED_REVIEW | PROCEED | MANUAL_REVIEW
+  policyVersionId          String
+  providerReference        String?
+  bureauMonthlyObligationsKobo BigInt?
+  outstandingExposureKobo  BigInt?
+  delinquencyIndicators    String[]
+  failureCode              String?
+  attempt                  Int       @default(1)
+  assessedAt               DateTime?
+  validUntil               DateTime?
+  createdAt                DateTime  @default(now())
+
+  @@index([applicationId])
+  @@index([customerId, assessedAt])
+  @@map("credit_assessments")
+}
+
+model EnhancedReview {
+  id              String    @id @default(uuid())
+  applicationId   String
+  queue           String // FAIR_CREDIT | THIN_FILE | BUSINESS_OWNER | INCONSISTENT_STATEMENT | BORDERLINE_AFFORDABILITY | FRAUD_INDICATOR | MANUAL_EXCEPTION
+  status          String // AWAITING_CUSTOMER | PENDING | CLARIFICATION_REQUESTED | DECISION_PENDING_APPROVAL | CLEARED | DECLINED | ESCALATED
+  formDataEncrypted String?
+  requestedFields String[]
+  clarificationNote String?
+  assignedToId    String?
+  slaDueAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  decisions       ReviewDecision[]
+
+  @@index([queue, status])
+  @@index([applicationId])
+  @@map("enhanced_reviews")
+}
+
+model ReviewDecision {
+  id              String         @id @default(uuid())
+  reviewId        String
+  review          EnhancedReview @relation(fields: [reviewId], references: [id])
+  decision        String // CLEAR | DECLINE | REQUEST_CLARIFICATION | ESCALATE
+  reason          String
+  evidence        String?
+  reviewerId      String
+  policyVersionId String
+  approvalId      String?
+  status          String         @default("EFFECTIVE") // PENDING_APPROVAL | EFFECTIVE | REJECTED
+  createdAt       DateTime       @default(now())
+
+  @@map("review_decisions")
+}
+
+// ---------------------------------------------------------------------------
+// Account verification & opening
+// ---------------------------------------------------------------------------
+
+model AccountOpeningRequest {
+  id               String    @id @default(uuid())
+  applicationId    String
+  correlationRef   String    @unique
+  status           String // INITIATED | REDIRECTED | CALLBACK_RECEIVED | VERIFIED | FAILED | EXPIRED
+  nonceHash        String
+  verifiedAccountId String?
+  failureCode      String?
+  expiresAt        DateTime
+  redirectedAt     DateTime?
+  callbackAt       DateTime?
+  verifiedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([applicationId])
+  @@map("account_opening_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Statements & analysis
+// ---------------------------------------------------------------------------
+
+model StoredDocument {
+  id            String    @id @default(uuid())
+  ownerType     String // APPLICATION | PARTNER | VENDOR
+  ownerId       String
+  partnerId     String?
+  kind          String // BANK_STATEMENT | SUPPORTING_DOCUMENT | OFFER_SUMMARY | PROMISE_TO_PURCHASE | SALE_AGREEMENT | VENDOR_INVOICE | ASSET_ACQUISITION_EVIDENCE | DELIVERY_EVIDENCE | PARTNER_KYB
+  filename      String
+  mimeType      String
+  sizeBytes     Int
+  sha256        String
+  storageKey    String    @unique
+  scanStatus    String    @default("PENDING") // PENDING | CLEAN | INFECTED | ERROR
+  createdAt     DateTime  @default(now())
+
+  @@index([ownerType, ownerId])
+  @@index([sha256])
+  @@map("stored_documents")
+}
+
+model StatementConnection {
+  id                    String    @id @default(uuid())
+  applicationId         String
+  channel               String // ALTBANK | MONO | PDF_UPLOAD
+  status                String
+  providerReference     String?
+  accountId             String?
+  documentId            String?
+  periodStart           String?
+  periodEnd             String?
+  requiredMonths        Int
+  ownershipConfidence   String? // HIGH | MEDIUM | LOW | MISMATCH
+  validationFindings    String[]
+  normalizedEncrypted   String? // encrypted normalised transaction set
+  failureCode           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([applicationId])
+  @@map("statement_connections")
+}
+
+model StatementAnalysisJob {
+  id               String    @id @default(uuid())
+  applicationId    String
+  connectionId     String
+  provider         String
+  providerJobRef   String?
+  status           String
+  attempts         Int       @default(0)
+  failureCode      String?
+  submittedAt      DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  result           StatementAnalysisResult?
+
+  @@index([applicationId])
+  @@index([status])
+  @@map("statement_analysis_jobs")
+}
+
+/// Provider-reported analysis (Periculum). Bank-derived calculations live in affordability_assessments.
+model StatementAnalysisResult {
+  id                         String               @id @default(uuid())
+  jobId                      String               @unique
+  job                        StatementAnalysisJob @relation(fields: [jobId], references: [id])
+  applicationId              String
+  analysisReference          String
+  periodStart                String
+  periodEnd                  String
+  accountHolderName          String
+  ownershipConfidence        String
+  averageMonthlyInflowKobo   BigInt
+  averageMonthlyOutflowKobo  BigInt
+  averageBalanceKobo         BigInt
+  recurringObligationsKobo   BigInt
+  existingFinancingRepaymentsKobo BigInt
+  businessRevenueMonthlyKobo BigInt?
+  salaryCreditsEncrypted     String // encrypted provider-classified credits used by the Bank's salary rules
+  stressIndicators           String[]
+  statementQuality           String
+  cashFlowConsistency        String?
+  providerRecommendedAmountKobo BigInt?
+  confidence                 String
+  reliable                   Boolean
+  createdAt                  DateTime             @default(now())
+
+  @@index([applicationId])
+  @@map("statement_analysis_results")
+}
+
+model AffordabilityAssessment {
+  id                           String   @id @default(uuid())
+  applicationId                String
+  policyVersionId              String
+  analysisResultId             String?
+  incomeProfile                IncomeProfile
+  outcome                      String // ELIGIBLE | CART_REVISION_REQUIRED | PARTIAL | DECLINED | MANUAL_REVIEW
+  reasons                      String[]
+  recognisedMonthlyIncomeKobo  BigInt?
+  existingMonthlyObligationsKobo BigInt?
+  capacityKobo                 BigInt?
+  existingExposureKobo         BigInt?
+  remainingExposureKobo        BigInt?
+  maxEligibleKobo              BigInt?
+  tenorBreakdown               Json?
+  monthBreakdown               Json?
+  createdAt                    DateTime @default(now())
+
+  @@index([applicationId])
+  @@map("affordability_assessments")
+}
+
+model ExposureReservation {
+  id            String    @id @default(uuid())
+  customerId    String
+  applicationId String    @unique
+  amountKobo    BigInt
+  status        String // ACTIVE | RELEASED | CONSUMED | EXPIRED
+  expiresAt     DateTime
+  releasedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([customerId, status])
+  @@map("exposure_reservations")
+}
+
+// ---------------------------------------------------------------------------
+// Offers
+// ---------------------------------------------------------------------------
+
+model FinancingOffer {
+  id                  String    @id @default(uuid())
+  reference           String    @unique
+  applicationId       String
+  policyVersionId     String
+  status              String // PRESENTED | ACCEPTED | EXPIRED | SUPERSEDED | WITHDRAWN
+  purchaseAmountKobo  BigInt
+  financingAmountKobo BigInt
+  contributionKobo    BigInt
+  tenorMonths         Int
+  markupBps           Int
+  profitKobo          BigInt
+  deferredSalePriceKobo BigInt
+  monthlyRepaymentKobo BigInt
+  feesKobo            BigInt    @default(0)
+  termsVersion        String
+  expiresAt           DateTime
+  acceptedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  instalments         RepaymentInstalment[]
+
+  @@index([applicationId, status])
+  @@map("financing_offers")
+}
+
+model RepaymentInstalment {
+  id         String         @id @default(uuid())
+  offerId    String
+  offer      FinancingOffer @relation(fields: [offerId], references: [id])
+  number     Int
+  dueDate    String
+  amountKobo BigInt
+
+  @@unique([offerId, number])
+  @@map("repayment_schedules")
+}
+
+model OfferAcceptance {
+  id            String   @id @default(uuid())
+  offerId       String   @unique
+  applicationId String
+  termsVersion  String
+  termsHash     String
+  ipAddress     String?
+  userAgent     String?
+  acceptedAt    DateTime @default(now())
+
+  @@map("offer_acceptances")
+}
+
+// ---------------------------------------------------------------------------
+// ARAF handover, documentation, conditions, mandate, booking
+// ---------------------------------------------------------------------------
+
+model ArafSubmission {
+  id              String    @id @default(uuid())
+  applicationId   String    @unique
+  idempotencyKey  String    @unique
+  status          String // PENDING | SUBMITTING | UNCERTAIN | RETRY_SCHEDULED | ACKNOWLEDGED | FAILED
+  payloadHash     String
+  arafReference   String?
+  attempts        Int       @default(0)
+  lastError       String?
+  nextAttemptAt   DateTime?
+  acknowledgedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("araf_submissions")
+}
+
+model ArafStatusEvent {
+  id            String   @id @default(uuid())
+  applicationId String
+  arafReference String
+  eventId       String   @unique
+  sequence      Int
+  stage         String
+  decision      String?
+  note          String?
+  actorName     String?
+  occurredAt    DateTime
+  processedAt   DateTime?
+  outcome       String? // APPLIED | IGNORED_STALE | REJECTED_INVALID
+  createdAt     DateTime @default(now())
+
+  @@index([applicationId, sequence])
+  @@map("araf_status_events")
+}
+
+model ContractualCondition {
+  id            String    @id @default(uuid())
+  applicationId String
+  code          String
+  description   String
+  required      Boolean   @default(true)
+  status        String    @default("PENDING") // PENDING | SATISFIED | WAIVED
+  evidenceRef   String?
+  satisfiedById String?
+  satisfiedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([applicationId, code])
+  @@map("contractual_conditions")
+}
+
+model FinancingDocument {
+  id            String    @id @default(uuid())
+  applicationId String
+  docType       String // PROMISE_TO_PURCHASE | OFFER_LETTER | SALE_AGREEMENT | VENDOR_INVOICE | ASSET_ACQUISITION_EVIDENCE
+  version       String
+  status        String // PENDING | ISSUED | SIGNED | VERIFIED | VOID
+  contentHash   String
+  content       String // rendered document text (synthetic templates in sandbox)
+  signedAt      DateTime?
+  signatureEvidence Json?
+  createdAt     DateTime  @default(now())
+
+  @@unique([applicationId, docType, version])
+  @@map("financing_documents")
+}
+
+model RepaymentMandate {
+  id                 String    @id @default(uuid())
+  applicationId      String    @unique
+  provider           String
+  status             String // NOT_STARTED | INITIATED | AWAITING_AUTHORIZATION | ACTIVE | FAILED | EXPIRED | CANCELLED
+  mandateReference   String?
+  authorizationUrl   String?
+  failureCode        String?
+  activatedAt        DateTime?
+  verifiedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("repayment_mandates")
+}
+
+model BookingRecord {
+  id                  String    @id @default(uuid())
+  applicationId       String    @unique
+  idempotencyKey      String    @unique
+  status              String // NOT_STARTED | REQUESTED | BOOKED | FAILED | UNKNOWN | REVERSED
+  arafApprovalReference String?
+  financingAmountKobo BigInt
+  profitKobo          BigInt
+  deferredSalePriceKobo BigInt
+  tenorMonths         Int
+  bookingReference    String?
+  failureCode         String?
+  requestedById       String?
+  requestedAt         DateTime?
+  bookedAt            DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("booking_records")
+}
+
+// ---------------------------------------------------------------------------
+// Vendor payment, reconciliation, release, fulfilment, returns
+// ---------------------------------------------------------------------------
+
+model VendorPaymentInstruction {
+  id                    String        @id @default(uuid())
+  reference             String        @unique
+  applicationId         String
+  partnerId             String
+  environment           Environment
+  idempotencyKey        String        @unique
+  amountKobo            BigInt
+  currency              String        @default("NGN")
+  vendorId              String
+  settlementAccountId   String
+  beneficiaryName       String
+  beneficiaryAccountMasked String
+  beneficiaryBankName   String
+  status                PaymentStatus @default(PENDING_APPROVAL)
+  providerReference     String?
+  confirmedByAuthoritativeSource Boolean @default(false)
+  isSimulated           Boolean
+  initiatedById         String
+  approvedById          String?
+  approvalId            String?
+  failureReason         String?
+  reconciliationStatus  String        @default("PENDING") // PENDING | MATCHED | DISCREPANCY | RESOLVED
+  initiatedAt           DateTime?
+  confirmedAt           DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  events                VendorPaymentEvent[]
+
+  @@index([applicationId])
+  @@index([partnerId, environment, status])
+  @@map("vendor_payment_instructions")
+}
+
+model VendorPaymentEvent {
+  id                String                   @id @default(uuid())
+  instructionId     String
+  instruction       VendorPaymentInstruction @relation(fields: [instructionId], references: [id])
+  status            PaymentStatus
+  source            String // INITIATION | PROVIDER_CALLBACK | STATUS_QUERY | RECONCILIATION | APPROVAL
+  providerReference String?
+  amountKobo        BigInt?
+  detail            String?
+  createdAt         DateTime                 @default(now())
+
+  @@index([instructionId])
+  @@map("vendor_payment_events")
+}
+
+model ReconciliationRun {
+  id          String   @id @default(uuid())
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  triggeredBy String
+  checked     Int      @default(0)
+  discrepancies Int    @default(0)
+  findings    ReconciliationFinding[]
+
+  @@map("reconciliation_runs")
+}
+
+model ReconciliationFinding {
+  id            String            @id @default(uuid())
+  runId         String
+  run           ReconciliationRun @relation(fields: [runId], references: [id])
+  applicationId String?
+  instructionId String?
+  type          String // DUPLICATE_PAYMENT | MISSING_CONFIRMATION | AMOUNT_MISMATCH | BENEFICIARY_MISMATCH | BOOKING_WITHOUT_PAYMENT | PAYMENT_WITHOUT_BOOKING | PAYMENT_WITHOUT_RELEASE | RELEASE_WITHOUT_CONFIRMED_PAYMENT | REFUND_DISCREPANCY | STATUS_MISMATCH
+  severity      String
+  detail        String
+  status        String            @default("OPEN") // OPEN | RESOLVED
+  resolvedById  String?
+  resolution    String?
+  resolvedAt    DateTime?
+  createdAt     DateTime          @default(now())
+
+  @@index([status])
+  @@map("payment_reconciliations")
+}
+
+model ReleaseAuthorization {
+  id                   String    @id @default(uuid())
+  reference            String    @unique
+  applicationId        String    @unique
+  partnerId            String
+  environment          Environment
+  orderId              String
+  paymentInstructionId String
+  vendorId             String
+  authorizedItems      Json
+  authorizedAmountKobo BigInt
+  status               String // AUTHORIZED | SUSPENDED | CONSUMED | REVOKED
+  conditionsSnapshot   Json
+  policyVersionId      String
+  contractReferences   String[]
+  isSimulated          Boolean
+  authorizedAt         DateTime  @default(now())
+  suspendedAt          DateTime?
+  suspensionReason     String?
+
+  @@index([partnerId, environment, status])
+  @@map("release_authorizations")
+}
+
+model FulfilmentRecord {
+  id              String    @id @default(uuid())
+  applicationId   String
+  releaseId       String
+  status          String // PREPARED | DISPATCHED | DELIVERED | COLLECTED | DELIVERY_EXCEPTION
+  trackingReference String?
+  carrier         String?
+  note            String?
+  evidenceDocumentId String?
+  actorType       String // PARTNER_USER | PARTNER_API | CUSTOMER
+  actorId         String
+  idempotencyKey  String?
+  createdAt       DateTime  @default(now())
+
+  @@unique([applicationId, status])
+  @@map("fulfilment_records")
+}
+
+model CancellationRequest {
+  id             String    @id @default(uuid())
+  applicationId  String
+  initiatedBy    String // CUSTOMER | PARTNER | BANK
+  actorId        String?
+  stage          String
+  reason         String
+  status         String // REQUESTED | APPROVED | REJECTED | COMPLETED
+  requiresReversal Boolean
+  decidedById    String?
+  decidedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([applicationId])
+  @@map("cancellation_requests")
+}
+
+model ReturnRequest {
+  id             String    @id @default(uuid())
+  applicationId  String
+  type           String // FULL_RETURN | PARTIAL_RETURN | DAMAGED | INCORRECT_PRODUCT | NON_DELIVERY
+  items          Json
+  reason         String
+  status         String // REQUESTED | APPROVED | REJECTED | GOODS_RECEIVED | COMPLETED
+  initiatedBy    String
+  actorId        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([applicationId])
+  @@map("return_requests")
+}
+
+model RefundRecord {
+  id               String    @id @default(uuid())
+  reference        String    @unique
+  applicationId    String
+  returnRequestId  String?
+  cancellationId   String?
+  direction        String    @default("VENDOR_TO_BANK")
+  expectedAmountKobo BigInt
+  receivedAmountKobo BigInt?
+  status           String // REQUESTED | APPROVED | VENDOR_REFUND_PENDING | VENDOR_REFUND_RECEIVED | RECONCILED | COMPLETED | REJECTED | FAILED
+  approvalId       String?
+  providerReference String?
+  isSimulated      Boolean
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([applicationId])
+  @@map("refund_records")
+}
+
+// ---------------------------------------------------------------------------
+// Events, webhooks, idempotency, notifications
+// ---------------------------------------------------------------------------
+
+model OutboxEvent {
+  id            String    @id @default(uuid())
+  aggregateType String
+  aggregateId   String
+  type          String
+  payload       Json
+  attempts      Int       @default(0)
+  lastError     String?
+  availableAt   DateTime  @default(now())
+  processedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([processedAt, availableAt])
+  @@map("outbox_events")
+}
+
+model WebhookEvent {
+  id              String      @id // evt_...
+  partnerId       String
+  environment     Environment
+  type            String
+  schemaVersion   String      @default("1.0")
+  applicationRef  String?
+  merchantOrderReference String?
+  resourceVersion Int
+  payload         Json
+  createdAt       DateTime    @default(now())
+  deliveries      WebhookDelivery[]
+
+  @@index([partnerId, environment, createdAt])
+  @@map("webhook_events")
+}
+
+model WebhookDelivery {
+  id            String          @id @default(uuid())
+  eventId       String
+  event         WebhookEvent    @relation(fields: [eventId], references: [id])
+  endpointId    String
+  endpoint      WebhookEndpoint @relation(fields: [endpointId], references: [id])
+  status        String // PENDING | SUCCEEDED | RETRYING | DEAD_LETTERED | SKIPPED
+  attemptCount  Int             @default(0)
+  nextAttemptAt DateTime?
+  lastStatusCode Int?
+  lastError     String?
+  succeededAt   DateTime?
+  createdAt     DateTime        @default(now())
+  attempts      WebhookDeliveryAttempt[]
+
+  @@unique([eventId, endpointId])
+  @@index([status, nextAttemptAt])
+  @@map("webhook_deliveries")
+}
+
+model WebhookDeliveryAttempt {
+  id           String          @id @default(uuid())
+  deliveryId   String
+  delivery     WebhookDelivery @relation(fields: [deliveryId], references: [id])
+  attemptNumber Int
+  statusCode   Int?
+  durationMs   Int
+  error        String?
+  responseSnippet String?
+  createdAt    DateTime        @default(now())
+
+  @@index([deliveryId])
+  @@map("webhook_delivery_attempts")
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid())
+  scope          String
+  key            String
+  requestHash    String
+  statusCode     Int?
+  responseBody   Json?
+  lockedUntil    DateTime?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([scope, key])
+  @@map("idempotency_records")
+}
+
+model NotificationTemplate {
+  id       String  @id @default(uuid())
+  code     String
+  channel  String
+  audience String // CUSTOMER | PARTNER | BANK
+  subject  String
+  body     String
+  version  Int     @default(1)
+  active   Boolean @default(true)
+
+  @@unique([code, channel, version])
+  @@map("notification_templates")
+}
+
+model Notification {
+  id            String    @id @default(uuid())
+  environment   Environment
+  audience      String
+  recipientRef  String // masked destination or user/partner id
+  partnerId     String?
+  applicationId String?
+  channel       String // EMAIL | SMS | IN_APP
+  templateCode  String
+  subject       String
+  body          String // never contains BVN, full statements or credit details
+  status        String // QUEUED | SENT | FAILED
+  providerRef   String?
+  readAt        DateTime?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([audience, recipientRef])
+  @@index([partnerId])
+  @@index([applicationId])
+  @@map("notifications")
+}
+
+/// Sandbox-only delivery inbox (e.g. OTP SMS). Never written in production environments.
+model SandboxMessage {
+  id           String   @id @default(uuid())
+  applicationId String?
+  channel      String
+  destination  String
+  body         String
+  createdAt    DateTime @default(now())
+
+  @@index([applicationId])
+  @@map("sandbox_messages")
+}
+
+// ---------------------------------------------------------------------------
+// Audit, integration logs, exceptions
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  sequence      BigInt   @default(autoincrement()) @unique
+  occurredAt    DateTime @default(now())
+  actorType     String
+  actorId       String?
+  actorLabel    String?
+  actorRoles    String[]
+  partnerId     String?
+  action        String
+  resourceType  String
+  resourceId    String?
+  correlationId String?
+  before        Json?
+  after         Json?
+  reason        String?
+  approvalRef   String?
+  ipAddress     String?
+  userAgent     String?
+  outcome       String   @default("SUCCESS") // SUCCESS | DENIED | FAILURE
+  prevHash      String
+  hash          String
+
+  @@index([resourceType, resourceId])
+  @@index([actorId])
+  @@index([action])
+  @@index([partnerId])
+  @@index([occurredAt])
+  @@map("audit_logs")
+}
+
+model IntegrationLog {
+  id            String   @id @default(uuid())
+  provider      String
+  operation     String
+  environment   Environment
+  isSimulated   Boolean
+  applicationId String?
+  correlationId String?
+  outcome       String // SUCCESS | FAILURE | TIMEOUT | INVALID_RESPONSE
+  errorCode     String?
+  latencyMs     Int
+  createdAt     DateTime @default(now())
+
+  @@index([provider, createdAt])
+  @@index([applicationId])
+  @@map("integration_logs")
+}
+
+model OperationalException {
+  id               String    @id @default(uuid())
+  reference        String    @unique
+  code             String
+  category         String
+  applicationId    String?
+  partnerId        String?
+  environment      Environment
+  severity         String // LOW | MEDIUM | HIGH | CRITICAL
+  responsibleTeam  String
+  status           String    @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED | ESCALATED
+  retryEligible    Boolean
+  escalated        Boolean   @default(false)
+  customerMessage  String
+  detail           String
+  assignedToId     String?
+  resolution       String?
+  history          Json      @default("[]")
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+
+  @@index([status, category])
+  @@index([applicationId])
+  @@map("operational_exceptions")
+}
+
+/// Reference sequences (ARAF-YYYY-NNNNNN, PAY-…, REL-…).
+model ReferenceSequence {
+  key   String @id
+  value Int
+
+  @@map("reference_sequences")
+}
+
+// ---------------------------------------------------------------------------
+// SANDBOX SIMULATORS — external systems simulated behind adapters.
+// These tables model the state of systems Pay with ARAF does not own (ARAF workflow,
+// core banking, Remita, payments, Mono, Periculum, account opening). In production
+// the corresponding live adapters are used and these tables are never read.
+// ---------------------------------------------------------------------------
+
+model SimArafCase {
+  id               String   @id @default(uuid())
+  arafReference    String   @unique
+  applicationRef   String   @unique
+  idempotencyKey   String   @unique
+  stage            String // RECEIVED | BUSINESS_EVALUATION | CREDIT_REVIEW | APPROVAL | APPROVED | INFO_REQUESTED | REJECTED
+  submission       Json
+  sequence         Int      @default(0)
+  assignedToId     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  actions          SimArafAction[]
+
+  @@map("sim_araf_cases")
+}
+
+model SimArafAction {
+  id         String      @id @default(uuid())
+  caseId     String
+  case       SimArafCase @relation(fields: [caseId], references: [id])
+  stage      String
+  action     String
+  actorId    String
+  actorName  String
+  note       String?
+  createdAt  DateTime    @default(now())
+
+  @@index([caseId])
+  @@map("sim_araf_actions")
+}
+
+model SimRecord {
+  id        String   @id @default(uuid())
+  kind      String // MONO_SESSION | PERICULUM_JOB | REMITA_MANDATE | CORE_BOOKING | PAYMENT | ACCOUNT_OPENING | BANK_ACCOUNT | EXPOSURE
+  key       String
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, key])
+  @@map("sim_records")
+}
