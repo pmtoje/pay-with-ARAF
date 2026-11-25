@@ -1,0 +1,199 @@
+openapi: 3.1.0
+info:
+  title: Pay with ARAF — Partner API
+  version: 1.0.0
+  description: |
+    Public partner API for embedded non-interest (Murabaha) financing by The Alternative Bank.
+    Monetary values are integer **kobo**. All requests use a secret key (`sk_test_…` sandbox,
+    `sk_live_…` production — production is locked until Bank approval).
+    Errors: `{ "error": { "code", "message", "retryable", "details"?, "correlation_id" } }`.
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local sandbox
+security:
+  - secretKey: []
+components:
+  securitySchemes:
+    secretKey:
+      type: http
+      scheme: bearer
+      description: Secret API key. Server-to-server only — never expose in browsers or apps.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128, pattern: '^[A-Za-z0-9_\-:.]+$' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable, correlation_id]
+          properties:
+            code: { type: string, example: CART_INVALID }
+            message: { type: string }
+            retryable: { type: boolean }
+            details: { type: object, additionalProperties: true }
+            correlation_id: { type: string }
+    CheckoutItem:
+      type: object
+      required: [sku, name, quantity, unit_amount, category, vendor_reference]
+      properties:
+        sku: { type: string, maxLength: 64 }
+        name: { type: string, maxLength: 200 }
+        quantity: { type: integer, minimum: 1, maximum: 1000 }
+        unit_amount: { type: integer, description: kobo, minimum: 1 }
+        category: { type: string }
+        vendor_reference: { type: string }
+    CreateCheckoutSession:
+      type: object
+      additionalProperties: false
+      required: [merchant_order_reference, currency, amount, items, return_url, cancel_url]
+      properties:
+        merchant_order_reference: { type: string, maxLength: 64 }
+        currency: { type: string, enum: [NGN] }
+        amount: { type: integer, description: 'kobo; must equal Σ unit_amount × quantity' }
+        items: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/CheckoutItem' } }
+        customer:
+          type: object
+          properties:
+            email: { type: string, format: email }
+            phone: { type: string, pattern: '^\+?\d{10,15}$' }
+        return_url: { type: string, format: uri, description: Origin must be approved for the partner }
+        cancel_url: { type: string, format: uri }
+        revises_session_id: { type: string, description: Supersede an active session with a revised cart }
+        metadata: { type: object, additionalProperties: { type: string } }
+    CheckoutSession:
+      type: object
+      properties:
+        object: { const: checkout_session }
+        session_id: { type: string, example: cs_test_7Gm2… }
+        application_reference: { type: string, example: ARAF-2026-000001 }
+        checkout_url: { type: string, format: uri }
+        status: { type: string, enum: [CREATED, OPEN, COMPLETED, EXPIRED, CANCELLED, SUPERSEDED] }
+        amount: { type: integer }
+        currency: { type: string }
+        expires_at: { type: string, format: date-time }
+        livemode: { type: boolean }
+    MerchantStatus:
+      type: string
+      enum: [IN_PROGRESS, CUSTOMER_ACTION_REQUIRED, UNDER_REVIEW, ELIGIBLE, SUBMITTED, APPROVED, VENDOR_PAYMENT_PENDING, VENDOR_PAYMENT_CONFIRMED, READY_FOR_RELEASE, DISPATCHED, DELIVERED, COMPLETED, DECLINED, CANCELLED, EXPIRED, ON_HOLD]
+    Application:
+      type: object
+      description: Never contains BVN, credit scores, statements, salary or affordability details.
+      properties:
+        object: { const: application }
+        reference: { type: string }
+        status: { $ref: '#/components/schemas/MerchantStatus' }
+        merchant_order_reference: { type: string }
+        checkout_session_id: { type: string }
+        currency: { type: string }
+        purchase_amount: { type: integer }
+        customer_contribution: { type: integer }
+        vendor_payment:
+          type: [object, 'null']
+          properties:
+            reference: { type: string }
+            status: { type: string }
+            amount: { type: integer }
+            confirmed_at: { type: [string, 'null'], format: date-time }
+            simulated: { type: boolean }
+        release:
+          type: object
+          properties:
+            reference: { type: string }
+            status: { type: string, enum: [AUTHORIZED, SUSPENDED, CONSUMED, REVOKED] }
+            authorized: { type: boolean }
+        timeline: { type: array, items: { type: object, properties: { status: { type: string }, at: { type: string, format: date-time } } } }
+        fulfilment: { type: array, items: { type: object } }
+        livemode: { type: boolean }
+    ReleaseAuthorization:
+      type: object
+      properties:
+        object: { const: release_authorization }
+        reference: { type: string, example: REL-000001 }
+        status: { type: string, enum: [AUTHORIZED, SUSPENDED, CONSUMED, REVOKED] }
+        release_authorized: { type: boolean, description: 'Only `true` with status AUTHORIZED permits releasing goods' }
+        application_reference: { type: string }
+        merchant_order_reference: { type: string }
+        vendor_reference: { type: string }
+        authorized_amount: { type: integer }
+        authorized_items: { type: array, items: { type: object } }
+        payment_reference: { type: string }
+        payment_status: { type: string }
+        vendor_payment_amount: { type: integer }
+        authorized_at: { type: string, format: date-time }
+        simulated: { type: boolean }
+paths:
+  /checkout/sessions:
+    post:
+      summary: Create a checkout session
+      description: Validates partner status, cart arithmetic, categories, limits, vendors and approved return URLs, then returns a hosted checkout URL. Scope `checkout:write`.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateCheckoutSession' } } } }
+      responses:
+        '201': { description: Created (or idempotent replay — header `Idempotent-Replayed: true`), content: { application/json: { schema: { $ref: '#/components/schemas/CheckoutSession' } } } }
+        '409': { description: DUPLICATE_CHECKOUT / IDEMPOTENCY_IN_PROGRESS, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: VALIDATION_FAILED / CART_INVALID / RETURN_URL_NOT_APPROVED / VENDOR_NOT_ELIGIBLE / IDEMPOTENCY_KEY_REUSED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /checkout/sessions/{id}:
+    get:
+      summary: Retrieve a checkout session (scope checkout:read)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK }, '404': { description: Not found (including other partners' sessions) } }
+  /applications/{reference}:
+    get:
+      summary: Application status (scope applications:read)
+      parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Application' } } } }, '404': { description: Not found } }
+  /orders/{reference}:
+    get:
+      summary: Order with current application (scope orders:read)
+      parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /releases/{reference}:
+    get:
+      summary: Verify a goods release authorisation (scope orders:read)
+      description: The ONLY acceptable proof that goods may be released. Never rely on browser redirects or customer screenshots.
+      parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseAuthorization' } } } } }
+  /orders/{reference}/fulfil:
+    post:
+      summary: Record preparation / dispatch / collection (scope orders:write)
+      parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, required: [status], properties: { status: { enum: [PREPARED, DISPATCHED, COLLECTED] }, tracking_reference: { type: string }, carrier: { type: string }, note: { type: string } } } } } }
+      responses: { '200': { description: OK }, '409': { description: RELEASE_NOT_AUTHORIZED / FULFILMENT_DUPLICATE } }
+  /orders/{reference}/deliver:
+    post:
+      summary: Confirm delivery or report a delivery exception (scope orders:write)
+      parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { delivered_at: { type: string, format: date-time }, note: { type: string }, exception: { type: boolean } } } } } }
+      responses: { '200': { description: OK } }
+  /orders/{reference}/cancel:
+    post:
+      summary: Cancel (before payment) or request a reversal (after payment instruction) (scope orders:write)
+      parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string } } } } } }
+      responses: { '200': { description: '`{status: CANCELLED}` or `{status: CANCELLATION_REQUESTED, requires_reversal: true}`' } }
+  /orders/{reference}/return:
+    post:
+      summary: Request a return (scope orders:write)
+      parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, required: [type, reason], properties: { type: { enum: [FULL_RETURN, PARTIAL_RETURN, DAMAGED, INCORRECT_PRODUCT, NON_DELIVERY] }, reason: { type: string }, items: { type: array } } } } } }
+      responses: { '200': { description: OK } }
+  /settlements:
+    get:
+      summary: Vendor payments (scope settlements:read)
+      parameters: [{ name: status, in: query, schema: { type: string } }, { name: limit, in: query, schema: { type: integer, maximum: 200 } }]
+      responses: { '200': { description: OK } }
+  /webhook-events:
+    get:
+      summary: Webhook events and delivery attempts (scope webhooks:read)
+      parameters: [{ name: type, in: query, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /webhook-events/{id}/retry:
+    post:
+      summary: Re-deliver an event (scope webhooks:write)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '202': { description: Queued } }

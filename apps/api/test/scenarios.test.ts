@@ -258,6 +258,19 @@ describe('Sandbox scenarios and security controls', () => {
     return { c: fresh, ref, state: v.body.state as string, sessionId: res.body.session_id as string };
   }
 
+  it('customer can return after the origination window once the offer was accepted', async () => {
+    const res = await createCheckout(h, a, cart(order()));
+    const c = await openCheckout(h, res.body.session_id);
+    await toOfferAccepted(h, c, '22200000001', '1990-04-12');
+    await h.prisma.checkoutSession.update({ where: { id: res.body.session_id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+    const back = await openCheckout(h, res.body.session_id);
+    expect((await back.state()).needs_reauthentication).toBe(true);
+    // A pre-acceptance application in an expired session cannot be reopened.
+    const res2 = await createCheckout(h, a, cart(order()));
+    await h.prisma.checkoutSession.update({ where: { id: res2.body.session_id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+    expect((await request(h.http).post(`/api/checkout/sessions/${res2.body.session_id}/open`)).body.error.code).toBe('CHECKOUT_EXPIRED');
+  });
+
   it('16. ARAF rejection → declined, exposure released', async () => {
     const res = await createCheckout(h, a, cart(order()));
     const c = await openCheckout(h, res.body.session_id);
@@ -386,6 +399,21 @@ describe('Sandbox scenarios and security controls', () => {
     expect(attempts[0].statusCode).toBe(500);
     expect(attempts[attempts.length - 1].statusCode).toBe(200);
     expect(await h.prisma.webhookDelivery.count({ where: { status: { in: ['RETRYING', 'PENDING'] } } })).toBe(0);
+  });
+
+  it('webhooks are delivered to hostname endpoints (DNS lookup path, not only IP literals)', async () => {
+    const url = h.receiver.url.replace('127.0.0.1', 'localhost');
+    const ep = await b.portal.post('/api/partner-portal/webhooks', { url, events: ['application.created'] });
+    expect(ep.status).toBe(201);
+    const before = h.receiver.received.length;
+    const original = h.receiver.secret;
+    h.receiver.secret = ep.body.signing_secret;
+    await createCheckout(h, b, cart(order()));
+    await drain(h, 1);
+    const delivery = await h.prisma.webhookDelivery.findFirstOrThrow({ where: { endpointId: ep.body.id }, orderBy: { createdAt: 'desc' } });
+    expect(delivery.status, delivery.lastError ?? '').toBe('SUCCEEDED');
+    expect(h.receiver.received.length).toBeGreaterThan(before);
+    h.receiver.secret = original;
   });
 
   // ---- Exposure concurrency ------------------------------------------------------------------

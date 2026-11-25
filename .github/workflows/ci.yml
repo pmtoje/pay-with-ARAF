@@ -1,0 +1,85 @@
+name: CI
+
+# Quality gate for every push and pull request. Production deployment is NOT triggered from
+# this workflow: it requires a reviewed, approved release through the Bank's change process
+# (see DEPLOYMENT.md).
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: araf, POSTGRES_PASSWORD: araf_local_dev, POSTGRES_DB: araf }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U araf" --health-interval 5s --health-retries 20
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    env:
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.28.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: sudo apt-get install -y postgresql-client redis-tools
+      - run: pnpm install --frozen-lockfile
+      - name: Secret scan
+        run: node scripts/scan-secrets.mjs
+      - name: Generate ephemeral CI secrets
+        run: node scripts/generate-env.mjs > .env
+      - name: Build packages
+        run: pnpm --filter "./packages/*" build
+      - name: Unit tests (business rules, security, integrations)
+        run: pnpm --filter @araf/business-rules --filter @araf/security --filter @araf/integrations test
+      - name: Apply migrations
+        run: cd packages/database && DATABASE_URL=postgresql://araf:araf_local_dev@localhost:5432/araf npx prisma migrate deploy
+      - name: API build and integration / end-to-end tests
+        run: pnpm --filter @araf/api build && pnpm --filter @araf/api test
+      - name: Dependency audit (report only; triage in SECURITY.md)
+        run: pnpm audit --prod --audit-level high || true
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        app: [customer-checkout, partner-portal, admin-portal, developer-portal, altmall-demo]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10.28.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter "@araf/${{ matrix.app }}" build
+
+  container:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -f infrastructure/docker/api.Dockerfile -t araf-api:ci .
+      - name: Container scan (report only)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: araf-api:ci
+          severity: CRITICAL,HIGH
+          exit-code: '0'

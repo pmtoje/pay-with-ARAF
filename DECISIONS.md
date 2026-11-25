@@ -1,0 +1,140 @@
+# Architecture & product decisions (ADR log)
+
+Each entry records context, the decision, and consequences. Entries marked **NEEDS BANK
+DECISION** are proposed interpretations that must be confirmed by the named stakeholders
+before production activation.
+
+---
+
+### D-001 — Modular monolith (NestJS) + separate worker process
+**Context.** The spec recommends a modular monolith with clear domain boundaries.
+**Decision.** One NestJS application (`apps/api`) with domain modules (partners, checkout,
+customer journey, credit, ARAF, operations, webhooks, reports, admin). The **worker** runs the
+same codebase with a different entrypoint (`dist/worker.js`) and is deployed separately.
+`apps/worker` is therefore not a separate package (see README structure note).
+**Consequences.** Simple deployment and transactions; services can be extracted later along the
+existing module seams.
+
+### D-002 — Transactional outbox + PostgreSQL `SKIP LOCKED` instead of BullMQ
+**Context.** The spec recommends BullMQ for background jobs and also requires transactional
+consistency between state changes and events.
+**Decision.** Durable work (webhook fan-out, notifications, ARAF submission) is written to the
+`outbox_events` table **in the same transaction** as the state change; the worker claims rows
+with `FOR UPDATE SKIP LOCKED` leases. Webhook deliveries live in `webhook_deliveries` with
+`nextAttemptAt` scheduling. Redis is used for rate limiting.
+**Consequences.** One source of truth (Postgres), no dual-write gap, safe multi-replica workers.
+BullMQ can be introduced behind `WorkerService` if throughput requires it.
+
+### D-003 — Separate deployments per record environment
+**Decision.** A deployment serves exactly one `PLATFORM_ENVIRONMENT` (SANDBOX or PRODUCTION).
+Sandbox deployments only accept `sk_test_` keys and only use simulators; production
+deployments only accept `sk_live_` keys and only use live adapters. Every partner-scoped row
+also carries `environment` (defence in depth).
+**Consequences.** Sandbox activity can never touch production records; partner master data is
+provisioned per deployment.
+
+### D-004 — Provisional brand identity — **NEEDS BANK DECISION (Brand/Marketing)**
+No official brand assets were supplied. Colours (`packages/design-tokens/tokens.css`) are
+documented placeholders inspired by a black/gold/white identity, and the "Pay with ARAF"
+mark is a neutral product wordmark, **not** the Bank's logo. Replace with official assets.
+
+### D-005 — Score bands (proposed) — **NEEDS BANK DECISION (Credit Risk)**
+280–529 Poor (decline), 530–619 Fair (enhanced assessment), 620–800 Good (proceed). Values
+outside 280–800 or non-integers are **invalid provider responses** (technical failure), not
+credit outcomes. A missing score is a thin file, routed per `thinFileTreatment`
+(default MANUAL_REVIEW), never coerced to 0.
+
+### D-006 — "DSCR" terminology
+The SWR's "DSCR" formula is a repayment-to-income ratio. Requirements keep the source term;
+code uses `repaymentToIncomeRatio`. Maximum 33.3% (`0.333`, exact rational comparison).
+
+### D-007 — Existing obligations source — **NEEDS BANK DECISION (Credit Risk)**
+Default `MAX(bureau monthly obligations, statement recurring obligations)` (conservative).
+Configurable to BUREAU or STATEMENT.
+
+### D-008 — Exposure basis — **NEEDS BANK DECISION (Credit Risk)**
+Single obligor limit ₦5,000,000 measured on `FINANCING_AMOUNT` by default (configurable to
+`DEFERRED_SALE_PRICE`). Treatment of outstanding principal, pending facilities and
+contingent exposure must be confirmed. Reservations are made under a row lock on the obligor.
+
+### D-009 — Instalment rounding
+Profit = round-half-up(financing × markupBps / 10 000). Regular instalment = ceil(DSP / tenor);
+the **final** instalment is adjusted down so the schedule sums exactly to the deferred sale
+price. This keeps the largest instalment monotonic in the financing amount, which makes the
+affordability search exact. (A remainder-absorbing *larger* final instalment was rejected
+because it breaks monotonicity — found by the spec-example test.)
+
+### D-010 — Partial financing disabled by default — **NEEDS BANK DECISION (Business, Legal, Shariah)**
+Implemented end-to-end (contribution amount, release gate requires contribution verification)
+but disabled at both policy and partner level. Contribution collection rails are not built.
+
+### D-011 — Contractual sequence (Murabaha) — **NEEDS BANK DECISION (Shariah governance, Legal, Credit Risk)**
+**Conflict.** The spec's ARAF route places *booking* before *vendor payment*; a classical
+Murabaha requires the Bank to acquire the asset before the sale to the customer (and arguably
+before booking the receivable).
+**Proposed sandbox sequence.** Approval → documentation (promise to purchase / wa'd, offer
+letter; customer e-signs with OTP) → repayment mandate → booking (`BOOKING_BEFORE_VENDOR_PAYMENT
+= true`) → vendor payment (Bank acquires asset; invoice in the Bank's name) → CAD records
+ownership/constructive possession → customer executes the Murabaha **sale agreement** (cost and
+profit disclosed) → **release authorised**. The release gate requires all six conditions
+(`PRE_RELEASE_CONDITIONS`). The sale contract cannot be executed before acquisition is evidenced.
+The booking position is a single flag pending Shariah ruling.
+
+### D-012 — ARAF remains authoritative; simulator only in sandbox
+No ARAF API was supplied. `ArafWorkflowProvider` defines idempotent submission + lookup by
+idempotency key + authenticated status events (`POST /api/callbacks/araf`, HMAC). The sandbox
+simulator (staff-operated, maker-checker on approval) emits the same events. The proposed
+stage list is **not** the Bank's approval hierarchy, which must be inherited from ARAF.
+
+### D-013 — Booking & vendor-payment execution ownership — **NEEDS BANK DECISION (Operations/CAD/Finance)**
+Pay with ARAF orchestrates booking and vendor payment through adapters, gated by ARAF approval
+and conditions, with maker-checker for payments. If ARAF itself executes these, the adapters
+become status consumers; the gates remain.
+
+### D-014 — Live adapters fail closed
+Without contracted specifications we do not invent endpoint formats. Every live adapter throws
+`IntegrationNotConfiguredError`; production config refuses `LIVE_OPERATIONS_ENABLED` outside
+`APP_ENV=production`; no code path serves a PRODUCTION record with a simulator.
+
+### D-015 — API keys hashed with a pepper; webhook secrets encrypted
+API secrets: HMAC-SHA256 with a server pepper, shown once, 16-char lookup prefix. Webhook
+signing secrets must be recoverable to sign, so they are AES-256-GCM encrypted with AAD bound to
+the endpoint id. Rotation keeps the previous secret signing for 24 h.
+
+### D-016 — Field encryption with AAD binding
+Sensitive fields (BVN, DOB, phone, account numbers, statement data, review forms, TOTP
+secrets) use AES-256-GCM with key ids (rotation) and associated data binding the ciphertext to
+its owner (e.g. `analysis:<applicationId>`), so ciphertexts cannot be swapped between records.
+Copying data between applications requires explicit re-encryption (found by tests, D-020).
+
+### D-017 — Customer authentication model
+Possession of the checkout URL grants nothing personal. The customer is authenticated by an
+OTP sent to the **phone linked to the BVN record** (never a checkout-entered phone). One active
+browser session per application; 5-minute inactivity → re-authentication with a resume OTP;
+OTPs are 6 digits, 5-minute TTL, single use, bound to challenge id and browser session, 5
+attempts, 60 s resend cooldown, invalidated by newer challenges.
+
+### D-018 — Staff & partner MFA: TOTP (RFC 6238) with replay protection
+Mandatory for every portal user. Phishing-resistant MFA (WebAuthn) and enterprise SSO (Bank IdP)
+are recommended for production privileged users (PRODUCTION_READINESS).
+
+### D-019 — Sandbox API credentials issued on first use
+On approval the partner is provisioned (configuration, dashboard, admin invitation, webhook
+signing profile). The partner admin generates the first sandbox key in the portal so the secret
+is only ever displayed to the partner, never stored or shown to Bank staff.
+
+### D-020 — Bugs found and fixed by the automated suites (selected)
+* Affordability bound non-monotonic with remainder-heavy final instalment (D-009).
+* `BigInt.prototype.toJSON` patch defeated serialisation replacers → kobo stored as floats;
+  replaced by an HTTP response interceptor.
+* `jsonb` reorders keys → audit hash chain verification failed; now canonical JSON.
+* Zod errors from a separate module instance surfaced as 500; now duck-typed → 422.
+* Reused assessments for revised carts were not re-evaluated / not re-encrypted.
+
+### D-021 — Test database isolation is non-destructive
+Each test run creates a new uniquely named database and applies `prisma migrate deploy`.
+Nothing is ever reset or dropped by the suites.
+
+### D-022 — Product images
+The demo storefront uses original inline SVG illustrations (no third-party images, logos or
+brand names) to avoid licensing issues.

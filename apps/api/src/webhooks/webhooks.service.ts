@@ -31,7 +31,9 @@ export function postPinned(target: WebhookTarget & { parsed: URL }, body: string
         method: 'POST',
         headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body).toString(), 'user-agent': 'PayWithARAF-Webhooks/1.0', ...headers },
         // Connect to the address we validated, defeating DNS rebinding; SNI/Host stay the original hostname.
-        lookup: (_host: string, _opts: unknown, cb: (err: Error | null, address: string, family: number) => void) => cb(null, target.address, target.family),
+        // Node ≥ 20 calls lookup with { all: true } and expects an array of addresses.
+        lookup: ((_host: string, opts: { all?: boolean }, cb: (err: Error | null, address: unknown, family?: number) => void) =>
+          opts?.all ? cb(null, [{ address: target.address, family: target.family }]) : cb(null, target.address, target.family)) as never,
         timeout: timeoutMs,
       },
       (res) => {

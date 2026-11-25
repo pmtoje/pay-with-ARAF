@@ -39,7 +39,14 @@ export function presentMerchantApplication(
         }
       : null,
     release: extra.release
-      ? { reference: extra.release.reference, status: extra.release.status, authorized: extra.release.status === 'AUTHORIZED' || extra.release.status === 'CONSUMED', authorized_at: extra.release.authorizedAt }
+      ? {
+          reference: extra.release.reference,
+          status: extra.release.status,
+          // `authorized` mirrors GET /releases/{ref}: true only while goods may still be released.
+          authorized: extra.release.status === 'AUTHORIZED',
+          released: extra.release.status === 'CONSUMED',
+          authorized_at: extra.release.authorizedAt,
+        }
       : { authorized: false },
     timeline: extra.timeline ?? [],
     fulfilment: extra.fulfilment ?? [],

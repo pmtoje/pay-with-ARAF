@@ -1,0 +1,59 @@
+# Local full stack. Usage:
+#   node scripts/generate-env.mjs > .env   # once
+#   docker compose up --build
+# Then: docker compose exec api node packages/database/dist/seed.js && node scripts/demo-bootstrap.mjs
+name: pay-with-araf
+x-api-env: &api-env
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://araf:araf_local_dev@postgres:5432/araf
+    REDIS_URL: redis://redis:6379
+    STORAGE_DIR: /data/storage
+services:
+  postgres:
+    image: postgres:16
+    environment: { POSTGRES_USER: araf, POSTGRES_PASSWORD: araf_local_dev, POSTGRES_DB: araf }
+    volumes: [pgdata:/var/lib/postgresql/data, ./infrastructure/docker/init-altmall.sql:/docker-entrypoint-initdb.d/10-altmall.sql:ro]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U araf"], interval: 5s, retries: 20 }
+  redis:
+    image: redis:7
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 20 }
+  migrate:
+    build: { context: ., dockerfile: infrastructure/docker/api.Dockerfile }
+    <<: *api-env
+    command: ["sh", "-c", "cd packages/database && npx prisma migrate deploy"]
+    depends_on: { postgres: { condition: service_healthy } }
+  api:
+    build: { context: ., dockerfile: infrastructure/docker/api.Dockerfile }
+    <<: *api-env
+    ports: ["4000:4000"]
+    volumes: [storage:/data/storage]
+    depends_on: { migrate: { condition: service_completed_successfully }, redis: { condition: service_healthy } }
+  worker:
+    build: { context: ., dockerfile: infrastructure/docker/api.Dockerfile }
+    <<: *api-env
+    command: ["node", "apps/api/dist/worker.js"]
+    volumes: [storage:/data/storage]
+    depends_on: { api: { condition: service_started } }
+  customer-checkout:
+    build: { context: ., dockerfile: infrastructure/docker/web.Dockerfile, args: { APP: customer-checkout } }
+    environment: { ARAF_API_URL: http://api:4000, PORT: "3001" }
+    ports: ["3001:3001"]
+  partner-portal:
+    build: { context: ., dockerfile: infrastructure/docker/web.Dockerfile, args: { APP: partner-portal } }
+    environment: { ARAF_API_URL: http://api:4000, PORT: "3002" }
+    ports: ["3002:3002"]
+  admin-portal:
+    build: { context: ., dockerfile: infrastructure/docker/web.Dockerfile, args: { APP: admin-portal } }
+    environment: { ARAF_API_URL: http://api:4000, PORT: "3003" }
+    ports: ["3003:3003"]
+  developer-portal:
+    build: { context: ., dockerfile: infrastructure/docker/web.Dockerfile, args: { APP: developer-portal } }
+    environment: { ARAF_API_URL: http://api:4000, PORT: "3004" }
+    ports: ["3004:3004"]
+  altmall-demo:
+    build: { context: ., dockerfile: infrastructure/docker/web.Dockerfile, args: { APP: altmall-demo } }
+    env_file: [apps/altmall-demo/.env.local]
+    environment: { ARAF_API_URL: http://api:4000, ALTMALL_DATABASE_URL: postgresql://araf:araf_local_dev@postgres:5432/altmall, PORT: "3005" }
+    ports: ["3005:3005"]
+volumes: { pgdata: {}, storage: {} }

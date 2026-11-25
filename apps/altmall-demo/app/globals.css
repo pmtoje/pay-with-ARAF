@@ -4,8 +4,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * AltMall store identity (a fictional demo merchant). Deliberately distinct from The Alternative
+ * Bank's black/gold: a deep "market green" accent. Pay with ARAF elements keep the ARAF gold.
+ */
+:root {
+  --mall: 22 92 72;            /* #165C48 — AA on white */
+  --mall-strong: 15 70 55;
+  --mall-soft: 228 241 235;
+  --mall-contrast: 255 255 255;
+  --art-line: 38 38 36;
+  --art-0: 222 236 228;        /* sage */
+  --art-1: 240 232 214;        /* sand */
+  --art-2: 226 231 238;        /* slate */
+}
+.dark {
+  --mall: 110 200 164;
+  --mall-strong: 140 216 184;
+  --mall-soft: 20 46 38;
+  --mall-contrast: 8 26 20;
+  --art-line: 226 224 218;
+  --art-0: 30 52 44;
+  --art-1: 56 48 32;
+  --art-2: 36 42 54;
+}
+
 @layer base {
   html { -webkit-text-size-adjust: 100%; }
   body { @apply bg-bg text-fg antialiased; font-feature-settings: 'cv11', 'ss01'; }
   :focus-visible { outline: 2px solid rgb(var(--color-focus)); outline-offset: 2px; }
+}
+
+@layer components {
+  .container-page { @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8; }
+  .link { @apply font-medium text-mall underline-offset-4 hover:underline focus-visible:underline; }
+  .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.14em]; }
+  .btn-mall { @apply inline-flex h-12 items-center justify-center gap-2 rounded-md bg-mall px-6 text-base font-medium text-mall-contrast transition-colors hover:bg-mall-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg; }
+  .btn-outline { @apply inline-flex h-12 items-center justify-center gap-2 rounded-md border border-border-strong bg-surface px-6 text-base font-medium text-fg transition-colors hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg; }
+  .btn-araf { @apply inline-flex h-12 items-center justify-center gap-2 rounded-md bg-ink px-6 text-base font-medium text-ink-contrast transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg; }
 }

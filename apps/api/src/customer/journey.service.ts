@@ -111,7 +111,8 @@ export class JourneyService {
   async summary(sessionId: string) {
     const { session, app } = await this.appBySession(sessionId);
     const partner = await this.prisma.partner.findUniqueOrThrow({ where: { id: session.partnerId }, select: { tradingName: true, websiteUrl: true } });
-    const expired = session.expiresAt.getTime() < Date.now() || ['EXPIRED', 'SUPERSEDED', 'CANCELLED'].includes(session.status);
+    const { EXPIRABLE_APPLICATION_STATES } = await import('@araf/business-rules');
+    const expired = session.status === 'SUPERSEDED' || (EXPIRABLE_APPLICATION_STATES.includes(app.status as never) && (session.expiresAt.getTime() < Date.now() || ['EXPIRED', 'CANCELLED'].includes(session.status)));
     return {
       session_id: session.id,
       application_reference: app.reference,
@@ -132,7 +133,13 @@ export class JourneyService {
   /** Start (or restart) the hosted-checkout browser session. */
   async open(sessionId: string, req: AuthedRequest, res: Response) {
     const { session, app } = await this.appBySession(sessionId);
-    if (session.expiresAt.getTime() < Date.now() || ['EXPIRED', 'SUPERSEDED', 'CANCELLED'].includes(session.status)) throw new AppError('CHECKOUT_EXPIRED');
+    // Checkout expiry only limits the origination window. Once an offer has been accepted, the
+    // customer must always be able to return (with OTP re-authentication) to track and act.
+    const { EXPIRABLE_APPLICATION_STATES } = await import('@araf/business-rules');
+    const originating = EXPIRABLE_APPLICATION_STATES.includes(app.status as never);
+    if (['SUPERSEDED'].includes(session.status) || (originating && (session.expiresAt.getTime() < Date.now() || ['EXPIRED', 'CANCELLED'].includes(session.status)))) {
+      throw new AppError('CHECKOUT_EXPIRED');
+    }
     await this.rateLimit.hit(`cx-open:${req.ip}`, 60, 300);
     const token = randomToken('', 48);
     const csrf = randomToken('', 32);
