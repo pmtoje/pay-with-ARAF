@@ -9,3 +9,25 @@
   body { @apply bg-bg text-fg antialiased; font-feature-settings: 'cv11', 'ss01'; }
   :focus-visible { outline: 2px solid rgb(var(--color-focus)); outline-offset: 2px; }
 }
+
+/* Code blocks use a fixed dark palette in both themes (contrast ≥ 4.5:1 on #121214). */
+@layer components {
+  .code-panel { background: #121214; color: #ece9e2; }
+  .tok-com { color: #9a958b; font-style: normal; }
+  .tok-str { color: #e2c274; }
+  .tok-key { color: #9cc3ff; }
+  .tok-kw { color: #f0a3a3; }
+  .tok-num { color: #8fd9b0; }
+  .tok-fn { color: #c9b8ff; }
+}
+
+/* Long-form documentation typography. */
+@layer components {
+  .doc-prose { @apply text-[15px] leading-7 text-fg; }
+  .doc-prose > p, .doc-prose li { @apply text-fg/90; }
+  .doc-prose a:not(.no-underline) { @apply font-medium text-gold-strong underline decoration-gold/40 underline-offset-4 hover:decoration-gold; }
+  .doc-prose code:not(pre code) { @apply rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[0.84em] text-fg; }
+  .doc-prose ul { @apply list-disc space-y-1.5 pl-5 marker:text-gold; }
+  .doc-prose ol { @apply list-decimal space-y-1.5 pl-5 marker:font-semibold marker:text-gold-strong; }
+  .doc-prose strong { @apply font-semibold text-fg; }
+}

@@ -14,6 +14,9 @@ export default {
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ['@araf/ui', '@araf/design-tokens'],
+  // Reference data (API scopes, webhook events, error catalogue, sandbox identities) is imported
+  // straight from the dependency-free source files in packages/, so the UI never drifts from the API.
+  experimental: { externalDir: true },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

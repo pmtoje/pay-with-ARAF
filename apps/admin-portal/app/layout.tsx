@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import { themeInitScript } from '@araf/ui';
+import { ToastProvider } from '@/components/common';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Pay with ARAF — Bank administration',
+  title: { default: 'Pay with ARAF — Bank administration', template: '%s · Pay with ARAF admin' },
   description: 'Pay with ARAF — embedded non-interest financing by The Alternative Bank (sandbox build).',
   robots: { index: false, follow: false },
 };
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

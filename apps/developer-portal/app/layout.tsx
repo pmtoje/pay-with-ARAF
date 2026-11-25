@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import { themeInitScript } from '@araf/ui';
+import { DocsShell } from '@/components/docs-shell';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Pay with ARAF — Developers',
+  title: { default: 'Pay with ARAF — Developers', template: '%s · Pay with ARAF Developers' },
   description: 'Pay with ARAF — embedded non-interest financing by The Alternative Bank (sandbox build).',
   robots: { index: false, follow: false },
 };
@@ -16,7 +17,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <DocsShell>{children}</DocsShell>
+      </body>
     </html>
   );
 }
