@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { classifyScore, customerCreditMessage, isAgeEligible, isValidBvnFormat, type ApplicationState } from '@araf/business-rules';
@@ -65,6 +66,7 @@ export class JourneyService {
     private readonly ctx: AppContextService,
     private readonly webhooks: WebhooksService,
     private readonly notifications: NotificationsService,
+    private readonly moduleRef: ModuleRef,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -329,7 +331,12 @@ export class JourneyService {
     });
     if (app.environment === 'SANDBOX') await this.providers.simStore.put(APP_IDENTITY, app.reference, { bvn });
     // A revised cart reuses still-valid assessments (no repeated credit checks or statements).
-    if (app.revisesApplicationId && (await this.tryReuseAssessments(app, req))) return this.view(app.id, req);
+    if (app.revisesApplicationId && (await this.tryReuseAssessments(app, req))) {
+      // Recompute affordability and exposure for the NEW cart with the reused, still-valid inputs.
+      const { EligibilityService } = await import('../credit/eligibility.service');
+      await this.moduleRef.get(EligibilityService, { strict: false }).evaluate(app.id, SYSTEM_ACTOR, req.correlationId);
+      return this.view(app.id, req);
+    }
     await this.runCreditCheck(app.id, req);
     return this.view(app.id, req);
   }
@@ -623,7 +630,9 @@ export class JourneyService {
       const job = await tx.statementAnalysisJob.findUniqueOrThrow({ where: { id: analysis.jobId } });
       const newJob = await tx.statementAnalysisJob.create({ data: { applicationId: app.id, connectionId: job.connectionId, provider: job.provider, providerJobRef: job.providerJobRef, status: 'COMPLETED', submittedAt: job.submittedAt, completedAt: job.completedAt } });
       const { id: _rid, jobId: _j, applicationId: _ra, createdAt: _rc, ...resultRest } = analysis;
-      await tx.statementAnalysisResult.create({ data: { ...resultRest, jobId: newJob.id, applicationId: app.id } });
+      // Encrypted fields are bound (AAD) to their application: re-encrypt under the new application.
+      const credits = this.crypto.decryptJson<unknown>(analysis.salaryCreditsEncrypted, `analysis:${prev.id}`);
+      await tx.statementAnalysisResult.create({ data: { ...resultRest, salaryCreditsEncrypted: this.crypto.encryptJson(credits, `analysis:${app.id}`), jobId: newJob.id, applicationId: app.id } });
       await tx.financingApplication.update({ where: { id: app.id }, data: { selectedAccountId: prev.selectedAccountId, incomeProfile: prev.incomeProfile } });
       await this.state.transitionApplication(tx, locked, 'ELIGIBLE', req.actor, { reason: 'REVISED_CART_REUSED_ASSESSMENTS', metadata: { revises: prev.reference } });
     });

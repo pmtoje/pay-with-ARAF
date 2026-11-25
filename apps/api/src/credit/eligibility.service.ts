@@ -244,7 +244,9 @@ export class EligibilityService {
       const policy = await this.ctx.policyFor(app.creditPolicyVersionId, tx);
       const config = await this.ctx.partnerConfig(app.partnerId, tx);
       if (!isApprovedTenor(tenor_months, policy) || !config.permittedTenors.includes(tenor_months)) throw new AppError('TENOR_NOT_SUPPORTED');
-      const a = await tx.affordabilityAssessment.findFirst({ where: { applicationId, outcome: { in: ['ELIGIBLE', 'PARTIAL'] } }, orderBy: { createdAt: 'desc' } });
+      const latest = await tx.affordabilityAssessment.findFirst({ where: { applicationId }, orderBy: { createdAt: 'desc' } });
+      if (latest?.outcome === 'CART_REVISION_REQUIRED') throw new AppError('OFFER_NOT_AFFORDABLE', { reason: 'CART_REVISION_REQUIRED' });
+      const a = latest && ['ELIGIBLE', 'PARTIAL'].includes(latest.outcome) ? latest : null;
       if (!a) throw new AppError('INVALID_STATE');
       const financing = app.purchaseAmountKobo - app.contributionAmountKobo;
       // Server-side re-verification: the customer cannot select an unaffordable option.

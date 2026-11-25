@@ -311,7 +311,12 @@ export class RateLimitService implements OnModuleDestroy {
   }
 
   /** Throws RATE_LIMITED when `limit` hits occur within `windowSeconds`. Fails closed for auth-critical keys. */
+  private readonly multiplier = Math.max(1, Number(process.env.RATE_LIMIT_MULTIPLIER ?? 1));
+
   async hit(key: string, limit: number, windowSeconds: number, failClosed = true): Promise<void> {
+    // RATE_LIMIT_MULTIPLIER exists only so automated test suites (one IP, many journeys) can run;
+    // config refuses it in production.
+    limit = limit * this.multiplier;
     try {
       const k = `rl:${key}`;
       const count = await this.redis.incr(k);

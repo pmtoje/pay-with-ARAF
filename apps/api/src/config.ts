@@ -56,6 +56,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (c.PLATFORM_ENVIRONMENT !== 'PRODUCTION') problems.push('production deployments must serve PRODUCTION records');
     if (!c.COOKIE_SECURE) problems.push('COOKIE_SECURE must be true');
     if (c.WEBHOOK_ALLOW_PRIVATE_NETWORKS) problems.push('WEBHOOK_ALLOW_PRIVATE_NETWORKS must be false');
+    if (Number(env.RATE_LIMIT_MULTIPLIER ?? 1) !== 1) problems.push('RATE_LIMIT_MULTIPLIER must not be set in production');
     for (const url of [c.PUBLIC_API_URL, c.CHECKOUT_BASE_URL, c.PARTNER_PORTAL_URL, c.ADMIN_PORTAL_URL]) {
       if (!url.startsWith('https://')) problems.push(`${url} must use https`);
     }

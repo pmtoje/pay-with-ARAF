@@ -44,9 +44,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       code = exception.code;
       details = exception.details;
       message = exception.message;
-    } else if (exception instanceof ZodError) {
+    } else if (exception instanceof ZodError || (exception as { name?: string })?.name === 'ZodError') {
+      // Duck-typed as well: zod errors can originate from another module instance (shared packages).
       code = 'VALIDATION_FAILED';
-      details = { fields: exception.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) };
+      details = { fields: (exception as ZodError).issues.map((i) => ({ path: i.path.join('.'), message: i.message })) };
     } else if (exception instanceof InvalidTransitionError) {
       code = 'INVALID_STATE';
     } else if (exception instanceof IntegrationNotConfiguredError) {

@@ -10,4 +10,5 @@ for (const line of readFileSync(envFile, 'utf8').split('\n')) {
 process.env.APP_ENV = 'test';
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL ?? 'postgresql://araf:araf_local_dev@localhost:5432/araf_test';
 process.env.SANDBOX_ASYNC_DELAY_MS = '0';
+process.env.RATE_LIMIT_MULTIPLIER = '50'; // many journeys from one test IP
 process.env.STORAGE_DIR = resolve(__dirname, '../../../storage-test');
