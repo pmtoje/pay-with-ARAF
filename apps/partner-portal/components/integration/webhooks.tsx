@@ -48,16 +48,16 @@ export function Webhooks({ endpoints, eventTypes, canManage, sandbox, onChange, 
                 </p>
                 {canManage && (
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => setConfirm({ kind: 'reveal', ep })}>
+                    <Button size="sm" variant="secondary" onClick={() => setConfirm({ kind: 'reveal', ep })} aria-label={`Reveal secret for ${ep.url}`}>
                       Reveal secret
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => setConfirm({ kind: 'rotate', ep })}>
+                    <Button size="sm" variant="secondary" onClick={() => setConfirm({ kind: 'rotate', ep })} aria-label={`Rotate secret for ${ep.url}`}>
                       Rotate secret
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => setEditing(ep)}>
+                    <Button size="sm" variant="secondary" onClick={() => setEditing(ep)} aria-label={`Edit events for ${ep.url}`}>
                       Edit events
                     </Button>
-                    <Button size="sm" variant={ep.status === 'ACTIVE' ? 'ghost' : 'primary'} className={ep.status === 'ACTIVE' ? 'text-danger' : undefined} onClick={() => setConfirm({ kind: 'toggle', ep })}>
+                    <Button size="sm" variant={ep.status === 'ACTIVE' ? 'ghost' : 'primary'} className={ep.status === 'ACTIVE' ? 'text-danger' : undefined} onClick={() => setConfirm({ kind: 'toggle', ep })} aria-label={`${ep.status === 'ACTIVE' ? 'Disable' : 'Enable'} ${ep.url}`}>
                       {ep.status === 'ACTIVE' ? 'Disable' : 'Enable'}
                     </Button>
                   </div>
