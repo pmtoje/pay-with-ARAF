@@ -33,17 +33,23 @@ supplied). This report does not certify the absence of vulnerabilities.
 | ID | Severity | Finding | Status |
 | --- | --- | --- | --- |
 | F-01 | High | Validation errors from shared-package zod instance returned HTTP 500 (could mask input-validation behaviour, noisy errors) | Fixed (duck-typed ZodError → 422), retested |
-| F-02 | High | Vulnerable dependency versions initially pinned (Next.js incl. critical advisories, NestJS core, multer, path-to-regexp, postcss, sharp, zod 3, Prisma transitive deps) | See "Dependency remediation" |
+| F-02 | High | Vulnerable dependency versions initially pinned (Next.js incl. critical advisories, NestJS core, multer, path-to-regexp, postcss, sharp, zod 3, Prisma transitive deps) | Fixed — upgraded; `pnpm audit --prod`: no known vulnerabilities |
 | F-03 | Medium | Encrypted analysis copied between applications failed AAD check (availability bug; confirmed AAD binding works as a control) | Fixed (re-encrypt), retested |
 | F-04 | Medium | Customers could not reopen an accepted application after the 24-h origination window | Fixed, regression test |
 | F-05 | Medium | Next.js CSP allows `'unsafe-inline'` scripts (self-origin only) | Open — move to nonce-based CSP |
 | F-06 | Medium | Sandbox malware scanning is signature-only (EICAR) | Open — Bank AV service required (production gate) |
+| F-10 | High | Webhook delivery to hostname endpoints failed on Node 22 (custom DNS-pinning lookup ignored `{all:true}`) — found by the AltMall integration | Fixed, regression test |
+| F-11 | Medium | `POST /partner-portal/webhooks/test-event` shadowed by `webhooks/:id` route | Fixed |
 | F-07 | Low | `/metrics` is unauthenticated (technical counters only) | Open — restrict at ingress |
 | F-08 | Low | Phone OTP is susceptible to SIM swap | Accepted for sandbox — Bank fraud controls / step-up |
 | F-09 | Info | Hosted checkout keeps the CSRF token in `sessionStorage` (per tab) so same-tab provider redirects do not force re-verification; session cookie remains HttpOnly | Accepted (documented) |
 
 ## Dependency remediation
-See the final section appended after the upgrade run (versions and residual advisories).
+Initial audit: 63 advisories (4 critical, 31 high). Remediation: next 15.5.29, @nestjs/* 11.1.29,
+prisma/@prisma/client 6.19.3, postcss 8.5.33, zod 4.6.7 (API migrated), pnpm overrides for sharp
+0.35.5, effect 3.22.1, deepmerge-ts 8.0.0, multer 2.5.0, path-to-regexp 8.4.0, file-type 21.3.2.
+Result: `pnpm audit --prod` → **No known vulnerabilities found**; all 178 tests and all five web
+builds pass on the upgraded set. CI re-runs the audit on every push.
 
 ## Mandatory before production
 Independent penetration test; DAST in pipeline; WAF/API gateway policies; KMS/HSM and secrets

@@ -18,7 +18,7 @@
 pnpm --filter @araf/business-rules test     # 94 tests
 pnpm --filter @araf/security test           # 36 tests
 pnpm --filter @araf/integrations test       #  7 tests
-pnpm --filter @araf/api test                # 39 tests (e2e lifecycle + scenarios/security)
+pnpm --filter @araf/api test                # 41 tests (e2e lifecycle + scenarios/security)
 node scripts/scan-secrets.mjs
 ```
 
@@ -80,8 +80,10 @@ session fixation (session rotation after MFA — code review) · XSS (React esca
 code review; no HTML rendering of user content).
 
 ## Results (latest local run)
-* business-rules 94/94 ✔ · security 36/36 ✔ · integrations 7/7 ✔ · API 39/39 ✔ (10 lifecycle + 29
-  scenario/security) — total **176 passing, 0 failing**.
+* business-rules 94/94 ✔ · security 36/36 ✔ · integrations 7/7 ✔ · API 41/41 ✔ (10 lifecycle + 31
+  scenario/security) — total **178 passing, 0 failing** (after dependency upgrades).
+* All five web apps pass `next build`; each was exercised in Playwright (Chromium) at mobile and
+  desktop widths against the live sandbox API during build-out, plus a final cross-app smoke run.
 * Defects found by the suites and fixed: see `DECISIONS.md` D-020.
 
 ## Not yet automated
