@@ -1,0 +1,79 @@
+/**
+ * Browser API helper for the portals and hosted checkout.
+ *
+ * Browser apps call the API through a same-origin proxy (`/api/...`), so session cookies are
+ * HttpOnly, SameSite=Strict and never readable by scripts. State-changing requests send the
+ * double-submit CSRF token from a readable companion cookie.
+ */
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly details?: Record<string, unknown>,
+    public readonly correlationId?: string,
+  ) {
+    super(message);
+  }
+}
+
+export function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.split('; ').find((c) => c.startsWith(`${name}=`));
+  return m ? decodeURIComponent(m.slice(name.length + 1)) : null;
+}
+
+export interface ApiClientOptions {
+  /** Name of the readable CSRF cookie, e.g. araf_csrf_admin. */
+  csrfCookie?: string;
+  /** Explicit CSRF token (e.g. the hosted checkout keeps it in memory). */
+  csrfToken?: () => string | null;
+  onUnauthenticated?: (err: ApiError) => void;
+}
+
+export function createApiClient(opts: ApiClientOptions = {}) {
+  async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+    if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
+    if (method !== 'GET') {
+      const token = opts.csrfToken?.() ?? (opts.csrfCookie ? readCookie(opts.csrfCookie) : null);
+      if (token) headers['X-CSRF-Token'] = token;
+    }
+    const res = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
+    });
+    const ct = res.headers.get('content-type') ?? '';
+    const data = ct.includes('application/json') ? await res.json().catch(() => null) : null;
+    if (!res.ok) {
+      const e = (data as { error?: { code: string; message: string; details?: Record<string, unknown>; correlation_id?: string } } | null)?.error;
+      const err = new ApiError(res.status, e?.code ?? 'HTTP_ERROR', e?.message ?? `Request failed (${res.status})`, e?.details, e?.correlation_id);
+      if (res.status === 401) opts.onUnauthenticated?.(err);
+      throw err;
+    }
+    return data as T;
+  }
+  return {
+    get: <T>(path: string) => request<T>('GET', path),
+    post: <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),
+    upload: <T>(path: string, form: FormData) => request<T>('POST', path, form),
+  };
+}
+
+/** Human-readable detail lines for validation errors. */
+export function errorLines(err: unknown): string[] {
+  if (!(err instanceof ApiError)) return [(err as Error)?.message ?? 'Unexpected error'];
+  const fields = (err.details?.fields as Array<{ path: string; message: string }> | undefined) ?? [];
+  const extras = [
+    ...fields.map((f) => `${f.path}: ${f.message}`),
+    ...(((err.details?.blockers as string[] | undefined) ?? []).map((b) => `Blocked: ${b.replace(/_/g, ' ').toLowerCase()}`)),
+    ...(((err.details?.pending as string[] | undefined) ?? []).map((b) => `Pending: ${b.replace(/_/g, ' ').toLowerCase()}`)),
+    ...(((err.details?.errors as string[] | undefined) ?? []).map((b) => b.replace(/_/g, ' ').toLowerCase())),
+  ];
+  return [err.message, ...extras];
+}

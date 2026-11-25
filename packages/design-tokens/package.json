@@ -1,0 +1,8 @@
+{
+  "name": "@araf/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "files": ["index.js", "tokens.css", "tailwind-preset.js"],
+  "scripts": { "build": "echo design-tokens: no build", "test": "echo no tests" }
+}

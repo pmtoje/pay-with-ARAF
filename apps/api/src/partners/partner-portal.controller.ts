@@ -291,6 +291,17 @@ export class PartnerPortalController {
     return { event_id: id };
   }
 
+  @Get('api-logs')
+  @PartnerUser('p.integration.read')
+  async apiLogs(@Query() q: Record<string, string>, @Ctx() req: AuthedRequest) {
+    const rows = await this.prisma.apiRequestLog.findMany({
+      where: { partnerId: this.pid(req), environment: this.config.PLATFORM_ENVIRONMENT, statusCode: q.errors_only === 'true' ? { gte: 400 } : undefined },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return rows.map((r) => ({ id: r.id, method: r.method, path: r.path, status: r.statusCode, duration_ms: r.durationMs, correlation_id: r.correlationId, idempotency_key: r.idempotencyKey, credential_id: r.credentialId, at: r.createdAt }));
+  }
+
   @Get('notifications')
   @PartnerUser('p.dashboard.read')
   notifications(@Ctx() req: AuthedRequest) {

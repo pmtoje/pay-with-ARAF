@@ -74,7 +74,10 @@ const SERVICES = [
   exports: SERVICES,
 })
 export class AppModule implements NestModule {
+  constructor(private readonly prismaService: PrismaService) {}
+
   configure(consumer: MiddlewareConsumer) {
+    const prisma = this.prismaService;
     consumer
       .apply((req: Request & { correlationId?: string }, res: Response, next: NextFunction) => {
         const incoming = req.headers['x-correlation-id'];
@@ -82,6 +85,12 @@ export class AppModule implements NestModule {
         res.setHeader('X-Correlation-Id', req.correlationId);
         const started = Date.now();
         res.on('finish', () => {
+          const r = req as Request & { api?: { partnerId: string; environment: 'SANDBOX' | 'PRODUCTION'; credentialId: string }; route?: { path?: string } };
+          if (r.api) {
+            void prisma.apiRequestLog
+              .create({ data: { partnerId: r.api.partnerId, environment: r.api.environment, credentialId: r.api.credentialId, method: req.method, path: (r.route?.path as string | undefined) ?? req.path.slice(0, 120), statusCode: res.statusCode, durationMs: Date.now() - started, correlationId: req.correlationId!, idempotencyKey: (req.headers['idempotency-key'] as string | undefined)?.slice(0, 128) } })
+              .catch(() => undefined);
+          }
           // Structured access log: no bodies, no query strings (which could contain tokens).
           process.stdout.write(
             JSON.stringify({ level: 'info', msg: 'http', method: req.method, path: (req.route?.path as string | undefined) ?? req.path.replace(/[0-9a-f-]{36}|cs_(test|live)_[A-Za-z0-9]+/g, ':id'), status: res.statusCode, ms: Date.now() - started, correlationId: req.correlationId }) + '\n',

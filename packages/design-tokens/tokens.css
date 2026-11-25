@@ -1,0 +1,68 @@
+/*
+ * Pay with ARAF design tokens.
+ *
+ * PROVISIONAL COLOURS: no official Alternative Bank brand assets were supplied for this
+ * build. The black / gold / white palette below is a documented placeholder inspired by the
+ * Bank's public identity and MUST be replaced with the official values from the Bank's brand
+ * guidelines before production (see DECISIONS.md D-004).
+ */
+:root {
+  --color-bg: 250 249 246;          /* warm white canvas */
+  --color-surface: 255 255 255;
+  --color-surface-2: 245 243 238;
+  --color-border: 228 224 214;
+  --color-border-strong: 200 194 180;
+  --color-text: 17 17 17;
+  --color-text-muted: 92 88 80;
+  --color-text-subtle: 130 125 115;
+  --color-ink: 12 12 13;            /* brand black */
+  --color-ink-contrast: 255 255 255;
+  --color-gold: 176 138 46;         /* provisional brand gold (AA on white for large text / UI) */
+  --color-gold-strong: 140 108 30;  /* AA for body text on white */
+  --color-gold-soft: 246 239 217;
+  --color-focus: 176 138 46;
+  --color-success: 22 120 72;
+  --color-success-soft: 225 243 233;
+  --color-warning: 161 98 7;
+  --color-warning-soft: 254 243 220;
+  --color-danger: 185 28 28;
+  --color-danger-soft: 253 230 230;
+  --color-info: 30 80 160;
+  --color-info-soft: 228 236 250;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 16px rgb(0 0 0 / 0.06);
+}
+
+.dark {
+  --color-bg: 11 11 12;
+  --color-surface: 22 22 24;
+  --color-surface-2: 30 30 33;
+  --color-border: 48 47 50;
+  --color-border-strong: 72 70 74;
+  --color-text: 240 238 233;
+  --color-text-muted: 178 173 163;
+  --color-text-subtle: 140 135 126;
+  --color-ink: 240 238 233;
+  --color-ink-contrast: 12 12 13;
+  --color-gold: 214 178 92;
+  --color-gold-strong: 226 194 116;
+  --color-gold-soft: 52 44 24;
+  --color-focus: 214 178 92;
+  --color-success: 74 196 132;
+  --color-success-soft: 20 52 36;
+  --color-warning: 234 170 60;
+  --color-warning-soft: 58 42 14;
+  --color-danger: 248 113 113;
+  --color-danger-soft: 64 22 22;
+  --color-info: 126 168 240;
+  --color-info-soft: 22 36 64;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 16px rgb(0 0 0 / 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

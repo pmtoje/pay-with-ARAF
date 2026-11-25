@@ -1451,6 +1451,24 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+/// Partner API request log (no bodies, no headers, no query strings).
+model ApiRequestLog {
+  id             String   @id @default(uuid())
+  partnerId      String
+  environment    Environment
+  credentialId   String
+  method         String
+  path           String
+  statusCode     Int
+  durationMs     Int
+  correlationId  String
+  idempotencyKey String?
+  createdAt      DateTime @default(now())
+
+  @@index([partnerId, createdAt])
+  @@map("api_request_logs")
+}
+
 model IntegrationLog {
   id            String   @id @default(uuid())
   provider      String
