@@ -18,7 +18,7 @@
 pnpm --filter @araf/business-rules test     # 94 tests
 pnpm --filter @araf/security test           # 36 tests
 pnpm --filter @araf/integrations test       #  7 tests
-pnpm --filter @araf/api test                # 41 tests (e2e lifecycle + scenarios/security)
+pnpm --filter @araf/api test                # 44 tests (e2e lifecycle + scenarios/security)
 node scripts/scan-secrets.mjs
 ```
 
@@ -80,11 +80,16 @@ session fixation (session rotation after MFA — code review) · XSS (React esca
 code review; no HTML rendering of user content).
 
 ## Results (latest local run)
-* business-rules 94/94 ✔ · security 36/36 ✔ · integrations 7/7 ✔ · API 41/41 ✔ (10 lifecycle + 31
-  scenario/security) — total **178 passing, 0 failing** (after dependency upgrades).
+* business-rules 94/94 ✔ · security 36/36 ✔ · integrations 7/7 ✔ · API 44/44 ✔ (11 lifecycle + 33
+  scenario/security) — total **181 passing, 0 failing** (after dependency upgrades).
 * All five web apps pass `next build`; each was exercised in Playwright (Chromium) at mobile and
   desktop widths against the live sandbox API during build-out, plus a final cross-app smoke run.
 * Defects found by the suites and fixed: see `DECISIONS.md` D-020.
+
+## ARAF execution reporting (D-013)
+E2E: full ordered report sequence acknowledged by the ARAF simulator · SCN: reporting outage → booking
+still completes, strict ordering while retrying, exception after 5 attempts, re-queue and exactly-once
+acknowledgement · SCN: booking failure reported.
 
 ## Not yet automated
 Cross-app Playwright suite in CI (browser checks were run during build-out), load/performance tests,

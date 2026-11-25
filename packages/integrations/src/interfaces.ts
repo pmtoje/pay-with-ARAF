@@ -171,10 +171,42 @@ export interface StatementAnalysisProvider {
 
 // ---- ARAF workflow -------------------------------------------------------------------
 
+/**
+ * Execution status reported BACK to ARAF (DECISIONS.md D-013: Pay with ARAF executes booking and
+ * vendor payment, ARAF stays the authoritative case record). Reports are idempotent on `eventId`
+ * and may arrive more than once; `sequence` lets ARAF ignore out-of-order delivery.
+ */
+export type ArafStatusReportType =
+  | 'BOOKING_CONFIRMED'
+  | 'BOOKING_FAILED'
+  | 'VENDOR_PAYMENT_INITIATED'
+  | 'VENDOR_PAYMENT_CONFIRMED'
+  | 'VENDOR_PAYMENT_FAILED'
+  | 'VENDOR_PAYMENT_REVERSED'
+  | 'RELEASE_AUTHORIZED'
+  | 'RELEASE_SUSPENDED'
+  | 'GOODS_DISPATCHED'
+  | 'GOODS_DELIVERED'
+  | 'REFUND_INITIATED'
+  | 'REFUND_COMPLETED'
+  | 'APPLICATION_CANCELLED';
+
+export interface ArafStatusReport {
+  eventId: string;
+  arafReference: string;
+  applicationReference: string;
+  type: ArafStatusReportType;
+  sequence: number;
+  occurredAt: string;
+  /** Operational references only (booking / payment / release references, amounts in kobo). */
+  data: Record<string, string | number | boolean | null>;
+}
+
 export interface ArafWorkflowProvider {
   readonly name: string;
   submit(payload: Record<string, unknown>, idempotencyKey: string, ctx: CallContext): Promise<{ arafReference: string }>;
   findByIdempotencyKey(idempotencyKey: string, ctx: CallContext): Promise<{ arafReference: string } | null>;
+  reportStatus(report: ArafStatusReport, ctx: CallContext): Promise<{ acknowledged: true; arafEventReference?: string }>;
 }
 
 // ---- Repayment mandate (Remita) ------------------------------------------------------

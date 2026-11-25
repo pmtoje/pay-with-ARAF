@@ -18,7 +18,7 @@
 | Confirmed core banking integration (exposure, booking) | Technology / CAD | Outstanding |
 | Confirmed vendor payment integration | Finance / Technology | Outstanding |
 | Pay with ARAF authorised as booking/payment originator (service accounts, limits, SoD, CAD/Finance procedures) — D-013 | CAD / Finance / InfoSec | Outstanding |
-| Outbound booking/payment status reporting to ARAF (event contract) — D-013 | Technology / Credit Admin | Outstanding |
+| Outbound execution-status reporting to ARAF: adapter + durable delivery built; live event contract (payload, transport, auth) to be agreed — D-013 | Technology / Credit Admin | Outstanding (contract) |
 | Approved credit policy (all PROPOSED values in BUSINESS_RULES.md) | Credit Risk | Outstanding |
 | Approved financing product structure | Product / Credit / Legal | Outstanding |
 | Approved Shariah contractual sequence (DECISIONS D-011) | Shariah governance | Outstanding |

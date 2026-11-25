@@ -70,7 +70,7 @@ function Application() {
         {tab === 'credit' && a.sensitive_access && <Credit a={a} />}
         {tab === 'statements' && <Statements a={a} canOpen={can('document.read.sensitive')} />}
         {tab === 'offers' && <Offers a={a} />}
-        {tab === 'araf' && <Araf a={a} />}
+        {tab === 'araf' && <Araf a={a} onChanged={state.reload} />}
         {tab === 'conditions' && <Conditions a={a} />}
         {tab === 'operations' && <OperationsPanel app={a} onChanged={state.reload} />}
         {tab === 'payments' && <Payments a={a} onChanged={state.reload} />}
@@ -332,7 +332,11 @@ function Offers({ a }: { a: AppDetail }) {
   );
 }
 
-function Araf({ a }: { a: AppDetail }) {
+function Araf({ a, onChanged }: { a: AppDetail; onChanged: () => void }) {
+  const { can } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   if (!a.araf) return <Card><EmptyState title="Not submitted to ARAF" description="The application is submitted once the customer accepts an offer." /></Card>;
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -355,6 +359,55 @@ function Araf({ a }: { a: AppDetail }) {
           }))} />
         )}
         <Link href="/araf-simulator" className="mt-4 inline-flex text-sm font-medium text-gold-strong hover:underline">Open the ARAF workflow simulator</Link>
+      </Section>
+      <Section
+        className="lg:col-span-3"
+        title="Execution reports sent to ARAF"
+        description="Booking, payment, release, fulfilment and refund outcomes reported back to ARAF in order. Each report is idempotent; a delay never blocks or reverses the operation itself."
+      >
+        {msg && <Alert tone="success" className="mb-3">{msg}</Alert>}
+        {!!error && <div className="mb-3"><ErrorAlert error={error} /></div>}
+        {!a.araf.outbound_reports?.length ? (
+          <p className="text-sm text-muted">Nothing reported yet. Reports start once financing is booked.</p>
+        ) : (
+          <DataTable
+            caption="Execution reports sent to ARAF"
+            rowKey={(r) => r.event_id}
+            rows={a.araf.outbound_reports}
+            dense
+            columns={[
+              { key: 'seq', header: '#', cell: (r) => r.sequence },
+              { key: 'type', header: 'Report', cell: (r) => humanize(r.type) },
+              { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status === 'DELIVERED' ? 'DELIVERED' : r.status} label={r.status === 'DELIVERED' ? 'Acknowledged' : humanize(r.status)} /> },
+              { key: 'attempts', header: 'Attempts', align: 'right', cell: (r) => r.attempts },
+              { key: 'when', header: 'Acknowledged', cell: (r) => (r.delivered_at ? formatDateTime(r.delivered_at) : '—') },
+              { key: 'err', header: 'Last error', cell: (r) => (r.last_error ? <span className="text-xs text-danger">{r.last_error}</span> : '—') },
+            ]}
+          />
+        )}
+        {can('exception.manage') && a.araf.outbound_reports?.some((r) => r.status !== 'DELIVERED') && (
+          <Button
+            className="mt-4"
+            variant="secondary"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              setMsg(null);
+              try {
+                const r = await api.post<{ requeued: number }>(`/api/admin/applications/${a.id}/araf-reports/retry`);
+                setMsg(`${r.requeued} report(s) queued for immediate redelivery.`);
+                onChanged();
+              } catch (e) {
+                setError(e);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Retry undelivered reports now
+          </Button>
+        )}
       </Section>
     </div>
   );

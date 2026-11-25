@@ -24,6 +24,7 @@ import { ApprovalsService } from '../approvals/approvals.service';
 import { JourneyService } from '../customer/journey.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { renderSimplePdf } from '../common/pdf';
+import { ArafReportingService, WEBHOOK_TO_ARAF_REPORT } from '../araf/araf-reporting.service';
 import type { AuthedRequest } from '../auth/auth.guard';
 
 const LIVE_PAYMENT_STATES: PaymentStatus[] = ['PENDING_APPROVAL', 'INITIATED', 'PROCESSING', 'CONFIRMED', 'UNKNOWN', 'RECONCILIATION_REQUIRED'];
@@ -50,6 +51,7 @@ export class OperationsService implements OnModuleInit {
     private readonly approvals: ApprovalsService,
     @Inject(forwardRef(() => JourneyService)) private readonly journey: JourneyService,
     private readonly notifications: NotificationsService,
+    private readonly arafReports: ArafReportingService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -94,6 +96,9 @@ export class OperationsService implements OnModuleInit {
 
   async emit(tx: Tx, app: FinancingApplication, type: Parameters<JourneyService['emitMerchant']>[2], data: Record<string, unknown> = {}) {
     await this.journey.emitMerchant(tx, app, type, data);
+    // Execution steps are reported back to ARAF in the same transaction (D-013).
+    const reportType = WEBHOOK_TO_ARAF_REPORT[type];
+    if (reportType) await this.arafReports.record(tx, app, reportType, data);
   }
 
   private async conditions(tx: Tx | PrismaService, applicationId: string) {
@@ -335,6 +340,7 @@ export class OperationsService implements OnModuleInit {
     await this.prisma.$transaction(async (tx) => {
       const locked = await this.ctx.lockApplication(tx, applicationId);
       await tx.bookingRecord.update({ where: { id: record.id }, data: { status: 'FAILED', failureCode: result.reason } });
+      await this.arafReports.record(tx, locked, 'BOOKING_FAILED', { reason: result.reason });
       await this.state.transitionApplication(tx, locked, 'EXCEPTION', actor, { reason: 'BOOKING_FAILURE', data: { exceptionReturnState: 'BOOKING_PENDING' } });
       await this.ctx.raiseException(tx, { code: 'BOOKING_FAILURE', category: 'BOOKING', application: locked, severity: 'HIGH', responsibleTeam: 'CAD', retryEligible: true, detail: `Core banking rejected booking: ${result.reason}. Vendor payment is blocked.` }, actor);
     });
@@ -348,7 +354,7 @@ export class OperationsService implements OnModuleInit {
       if (locked.status === 'EXCEPTION') await this.state.transitionApplication(tx, locked, 'BOOKING_PENDING', actor, { reason: 'RECONCILED_BOOKING' });
       await this.state.transitionApplication(tx, locked, 'FINANCING_BOOKED', actor);
       await this.ctx.resolveExceptions(tx, applicationId, ['BOOKING_FAILURE'], 'Booking confirmed by core banking', actor);
-      await this.emit(tx, locked, 'financing.booked');
+      await this.emit(tx, locked, 'financing.booked', { booking_reference: bookingReference });
       await this.audit.record(actor, { action: 'booking.confirmed', resourceType: 'APPLICATION', resourceId: applicationId, partnerId: locked.partnerId, after: { bookingReference } }, tx);
     });
     return { status: 'BOOKED', booking_reference: bookingReference };

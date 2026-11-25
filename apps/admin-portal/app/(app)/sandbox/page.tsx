@@ -18,6 +18,7 @@ const FORCED = [
   { id: 'PAYMENT_FAILURE', label: 'Payment failure', help: 'Vendor payment is rejected by the payment system.' },
   { id: 'PAYMENT_UNKNOWN', label: 'Payment outcome unknown', help: 'Payment times out → reconciliation required.' },
   { id: 'ANALYSIS_FAILURE', label: 'Statement analysis failure', help: 'Periculum analysis job fails.' },
+  { id: 'ARAF_REPORTING_FAILURE', label: 'ARAF reporting outage', help: 'ARAF stops acknowledging execution reports → retries, then an operations exception.' },
 ];
 
 export default function SandboxPage() {

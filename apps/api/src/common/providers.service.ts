@@ -14,6 +14,8 @@ import {
   SandboxRemitaProvider,
   SandboxSeedFiProvider,
   liveProviders,
+  FORCED,
+  type ArafStatusReport,
   type ArafWorkflowProvider,
   type CallContext,
   type ProviderSet,
@@ -58,6 +60,21 @@ class SandboxArafProvider implements ArafWorkflowProvider {
   async findByIdempotencyKey(idempotencyKey: string) {
     const c = await this.prisma.simArafCase.findUnique({ where: { idempotencyKey } });
     return c ? { arafReference: c.arafReference } : null;
+  }
+  /** Simulated ARAF receipt of execution status: idempotent on eventId, visible in the case history. */
+  async reportStatus(report: ArafStatusReport) {
+    const c = await this.prisma.simArafCase.findUnique({ where: { arafReference: report.arafReference } });
+    if (!c) throw new ProviderError('ARAF', 'NOT_FOUND', 'Unknown ARAF case');
+    const forced = await this.prisma.simRecord.findUnique({ where: { kind_key: { kind: FORCED, key: c.applicationRef } } });
+    if ((forced?.data as { outcomes?: string[] } | undefined)?.outcomes?.includes('ARAF_REPORTING_FAILURE')) throw new ProviderError('ARAF', 'UNAVAILABLE', 'ARAF reporting endpoint unavailable (simulated)');
+    const seen = await this.prisma.simRecord.findUnique({ where: { kind_key: { kind: 'ARAF_REPORT', key: report.eventId } } });
+    if (seen) return { acknowledged: true as const, arafEventReference: (seen.data as { ref: string }).ref };
+    const ref = `ARAF-EVT-${randomBase62(10).toUpperCase()}`;
+    await this.prisma.$transaction([
+      this.prisma.simRecord.create({ data: { kind: 'ARAF_REPORT', key: report.eventId, data: toJsonRaw({ ref, sequence: report.sequence, type: report.type }) } }),
+      this.prisma.simArafAction.create({ data: { caseId: c.id, stage: c.stage, action: `REPORTED:${report.type}`, actorId: 'pay-with-araf', actorName: 'Pay with ARAF (execution report)', note: JSON.stringify(report.data).slice(0, 1000) } }),
+    ]);
+    return { acknowledged: true as const, arafEventReference: ref };
   }
 }
 

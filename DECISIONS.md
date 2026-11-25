@@ -98,8 +98,17 @@ UNKNOWN and are reconciled, never re-initiated; release only via the release gat
 **Consequences.** Pay with ARAF must be onboarded to the core banking booking API and the payment
 rail as an authorised originating system: service accounts, transaction limits, segregation of
 duties, Finance and CAD operating procedures, and daily reconciliation with core banking and rail
-statements become production gates (see PRODUCTION_READINESS.md). Status changes are reported back
-to ARAF so its case record stays complete (event contract still to be agreed with the ARAF team).
+statements become production gates (see PRODUCTION_READINESS.md).
+**Reporting back to ARAF (implemented).** `ArafWorkflowProvider.reportStatus` sends execution
+outcomes — BOOKING_CONFIRMED/FAILED, VENDOR_PAYMENT_INITIATED/CONFIRMED/FAILED/REVERSED,
+RELEASE_AUTHORIZED/SUSPENDED, GOODS_DISPATCHED/DELIVERED, REFUND_INITIATED/COMPLETED,
+APPLICATION_CANCELLED. Reports are written to `araf_outbound_reports` in the same transaction as
+the change, delivered by the worker strictly in per-application sequence, idempotent on the event
+id, retried with backoff; after 5 failed attempts an `ARAF_REPORTING_DELAYED` operations exception
+is raised (auto-resolved on delivery; manual re-queue available). A reporting outage never blocks
+or reverses the financial operation. The sandbox simulator records reports in the case history.
+The live wire format is **not** invented: the live adapter fails closed until the ARAF team agrees
+the event contract (payload, transport, authentication).
 
 ### D-014 — Live adapters fail closed
 Without contracted specifications we do not invent endpoint formats. Every live adapter throws

@@ -11,7 +11,8 @@ export type ForcedOutcome =
   | 'BOOKING_FAILURE'
   | 'PAYMENT_FAILURE'
   | 'PAYMENT_UNKNOWN'
-  | 'ANALYSIS_FAILURE';
+  | 'ANALYSIS_FAILURE'
+  | 'ARAF_REPORTING_FAILURE';
 
 export interface StatementProfile {
   kind: 'SALARY' | 'BUSINESS';

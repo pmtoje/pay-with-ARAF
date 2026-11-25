@@ -25,6 +25,7 @@ import { CustomerController } from './customer/customer.controller';
 import { EligibilityService } from './credit/eligibility.service';
 import { ReviewsService } from './credit/reviews.service';
 import { ArafService } from './araf/araf.service';
+import { ArafReportingService } from './araf/araf-reporting.service';
 import { OperationsService } from './operations/operations.service';
 import { ReportsService } from './reports/reports.service';
 import { AdminService } from './admin/admin.service';
@@ -55,6 +56,7 @@ const SERVICES = [
   EligibilityService,
   ReviewsService,
   ArafService,
+  ArafReportingService,
   OperationsService,
   ReportsService,
   AdminService,

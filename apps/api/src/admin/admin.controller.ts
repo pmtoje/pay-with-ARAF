@@ -12,6 +12,7 @@ import { OperationsService } from '../operations/operations.service';
 import { ReportsService, parseRange } from '../reports/reports.service';
 import { AdminService } from './admin.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { ArafReportingService } from '../araf/araf-reporting.service';
 
 const reason = z.object({ reason: z.string().min(3).max(1000) }).strict();
 const comment = z.object({ comment: z.string().min(3).max(1000) }).strict();
@@ -28,6 +29,7 @@ export class AdminController {
     private readonly reports: ReportsService,
     private readonly audit: AuditService,
     private readonly webhooks: WebhooksService,
+    private readonly arafReports: ArafReportingService,
   ) {}
 
   // ---- Dashboards & reports -----------------------------------------------------------
@@ -263,6 +265,15 @@ export class AdminController {
     return this.ops.reinstateRelease(id, reason.parse(body).reason, req.actor);
   }
 
+  @Post('applications/:id/araf-reports/retry')
+  @HttpCode(200)
+  @Staff('exception.manage')
+  async retryArafReports(@Param('id') id: string, @Ctx() req: AuthedRequest) {
+    const n = await this.arafReports.retryNow(id);
+    await this.audit.record(req.actor, { action: 'araf.reports_retried', resourceType: 'APPLICATION', resourceId: id, after: { requeued: n } });
+    return { requeued: n };
+  }
+
   @Post('applications/:id/refunds')
   @Staff('refund.manage')
   refund(@Param('id') id: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {
@@ -445,7 +456,7 @@ export class AdminController {
   @HttpCode(200)
   @Staff('exception.manage')
   forced(@Param('id') id: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {
-    const { outcomes } = z.object({ outcomes: z.array(z.enum(['MANDATE_FAILURE', 'BOOKING_FAILURE', 'PAYMENT_FAILURE', 'PAYMENT_UNKNOWN', 'ANALYSIS_FAILURE'])) }).strict().parse(body);
+    const { outcomes } = z.object({ outcomes: z.array(z.enum(['MANDATE_FAILURE', 'BOOKING_FAILURE', 'PAYMENT_FAILURE', 'PAYMENT_UNKNOWN', 'ANALYSIS_FAILURE', 'ARAF_REPORTING_FAILURE'])) }).strict().parse(body);
     return this.admin.setForcedOutcomes(id, outcomes, req.actor);
   }
 

@@ -333,6 +333,46 @@ describe('Sandbox scenarios and security controls', () => {
     expect((await h.prisma.financingApplication.findUniqueOrThrow({ where: { id: stale.applicationId } })).status).not.toBe('DECLINED');
   });
 
+  it('ARAF reporting outage: financial operation completes, reports retry in order, exception raised then resolved', async () => {
+    const { ref, state } = await toBookingPending('22200000001', '1990-04-12');
+    expect(state).toBe('BOOKING_PENDING');
+    const app = await appOf(ref);
+    expect((await ops.post(`/api/admin/sandbox/applications/${app.id}/forced-outcomes`, { outcomes: ['ARAF_REPORTING_FAILURE'] })).status).toBe(200);
+    await cad.post(`/api/admin/applications/${app.id}/invoice/verify`);
+    // Booking is NOT blocked by ARAF reporting being down.
+    expect((await cad.post(`/api/admin/applications/${app.id}/booking`)).body.status).toBe('BOOKED');
+    await settlement.post(`/api/admin/applications/${app.id}/vendor-payment`);
+    for (let i = 0; i < 5; i++) {
+      await h.prisma.arafOutboundReport.updateMany({ where: { applicationId: app.id, status: { in: ['PENDING', 'RETRYING'] } }, data: { nextAttemptAt: new Date() } });
+      await drain(h, 1);
+    }
+    const stuck = await h.prisma.arafOutboundReport.findMany({ where: { applicationId: app.id }, orderBy: { sequence: 'asc' } });
+    expect(stuck.map((r) => r.type)).toEqual(['BOOKING_CONFIRMED', 'VENDOR_PAYMENT_INITIATED']);
+    expect(stuck[0].status).toBe('RETRYING');
+    expect(stuck[0].attempts).toBeGreaterThanOrEqual(5);
+    // Ordering: the later report is not sent ahead of the undelivered earlier one.
+    expect(stuck[1].attempts).toBe(0);
+    expect(await h.prisma.operationalException.count({ where: { applicationId: app.id, code: 'ARAF_REPORTING_DELAYED', status: 'OPEN' } })).toBe(1);
+    // ARAF recovers; operations re-queue; everything is delivered once, in order.
+    await ops.post(`/api/admin/sandbox/applications/${app.id}/forced-outcomes`, { outcomes: [] });
+    expect((await ops.post(`/api/admin/applications/${app.id}/araf-reports/retry`)).status).toBe(200);
+    await drain(h, 2);
+    const done = await h.prisma.arafOutboundReport.findMany({ where: { applicationId: app.id }, orderBy: { sequence: 'asc' } });
+    expect(done.every((r) => r.status === 'DELIVERED')).toBe(true);
+    expect(await h.prisma.simRecord.count({ where: { kind: 'ARAF_REPORT', key: { in: done.map((r) => r.id) } } })).toBe(done.length);
+    expect(await h.prisma.operationalException.count({ where: { applicationId: app.id, code: 'ARAF_REPORTING_DELAYED', status: 'OPEN' } })).toBe(0);
+  });
+
+  it('booking failure is reported to ARAF', async () => {
+    const { ref } = await toBookingPending('22200000018', '1990-01-18');
+    const app = await appOf(ref);
+    await cad.post(`/api/admin/applications/${app.id}/invoice/verify`);
+    await cad.post(`/api/admin/applications/${app.id}/booking`);
+    await drain(h, 1);
+    const types = (await h.prisma.arafOutboundReport.findMany({ where: { applicationId: app.id } })).map((r) => r.type);
+    expect(types).toEqual(['BOOKING_FAILED']);
+  });
+
   async function toPaymentPending(bvn: string, dob: string) {
     const { ref } = await toBookingPending(bvn, dob);
     const app = await appOf(ref);

@@ -43,6 +43,15 @@ dead-letter; manual retry via API/portal; endpoints suspended after 25 consecuti
 Process idempotently by `event_id`; ignore events with a lower `resource_version` than you
 have stored. Event catalogue: `packages/types/src/events.ts`.
 
+## Outbound reports to ARAF (internal)
+Pay with ARAF executes booking and vendor payment (D-013) and reports each outcome to ARAF through
+`ArafWorkflowProvider.reportStatus`: `{ eventId, arafReference, applicationReference, type, sequence,
+occurredAt, data }`, where `data` holds operational references only (booking, payment and release
+references, amounts in kobo). Delivery is at-least-once, in `sequence` order per application;
+ARAF should de-duplicate on `eventId`. Status per report is visible in the admin application view
+(`araf.outbound_reports`); `POST /api/admin/applications/:id/araf-reports/retry` re-queues
+undelivered reports.
+
 ## Example
 ```bash
 curl -X POST http://localhost:4000/api/v1/checkout/sessions \

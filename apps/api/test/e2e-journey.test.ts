@@ -226,6 +226,25 @@ describe('Pay with ARAF — end-to-end sandbox lifecycle', () => {
     expect(view.status.label).toBe('Delivered');
   });
 
+  it('execution status is reported back to ARAF in order and acknowledged (D-013)', async () => {
+    await drain(h, 2);
+    const app = await h.prisma.financingApplication.findUniqueOrThrow({ where: { reference } });
+    const reports = await h.prisma.arafOutboundReport.findMany({ where: { applicationId: app.id }, orderBy: { sequence: 'asc' } });
+    expect(reports.map((r) => r.type)).toEqual([
+      'BOOKING_CONFIRMED', 'VENDOR_PAYMENT_INITIATED', 'VENDOR_PAYMENT_CONFIRMED', 'RELEASE_AUTHORIZED', 'GOODS_DISPATCHED', 'GOODS_DELIVERED',
+    ]);
+    expect(reports.every((r) => r.status === 'DELIVERED')).toBe(true);
+    expect(reports.map((r) => r.sequence)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect((reports[0].data as Record<string, unknown>).booking_reference).toMatch(/^FIN-SBX-/);
+    // The simulated ARAF case history shows each report exactly once.
+    const simCase = await h.prisma.simArafCase.findUniqueOrThrow({ where: { applicationRef: reference }, include: { actions: true } });
+    const received = simCase.actions.filter((a) => a.action.startsWith('REPORTED:')).map((a) => a.action.slice(9));
+    expect(received).toEqual(reports.map((r) => r.type));
+    // Visible to Bank staff on the application.
+    const detail = await analyst.get(`/api/admin/applications/${app.id}`);
+    expect(detail.body.araf.outbound_reports).toHaveLength(6);
+  });
+
   it('management dashboards reflect the lifecycle from database records; audit chain intact', async () => {
     const overview = await management.get('/api/admin/overview?range=all');
     expect(overview.status).toBe(200);

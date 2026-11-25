@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 — 2026-11-25
+### Added
+- ARAF execution-status reporting (D-013): `ArafWorkflowProvider.reportStatus`, durable ordered
+  delivery from `araf_outbound_reports`, retries, `ARAF_REPORTING_DELAYED` exception, admin view and
+  re-queue, sandbox simulator receipt and `ARAF_REPORTING_FAILURE` forced outcome; 3 new tests.
+
 ## 0.1.0 — 2026-11-25 (sandbox build)
 ### Added
 - Business rules package: exact kobo arithmetic, SeedScore classification, salary consolidation,

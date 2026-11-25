@@ -14,6 +14,7 @@ import { ApprovalsService } from '../approvals/approvals.service';
 import { PartnersService } from '../partners/partners.service';
 import { OperationsService } from '../operations/operations.service';
 import { n } from '../applications/presenters';
+import { ArafReportingService } from '../araf/araf-reporting.service';
 
 @Injectable()
 export class AdminService implements OnModuleInit {
@@ -25,6 +26,7 @@ export class AdminService implements OnModuleInit {
     private readonly approvals: ApprovalsService,
     private readonly partners: PartnersService,
     private readonly ops: OperationsService,
+    private readonly arafReports: ArafReportingService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -140,7 +142,7 @@ export class AdminService implements OnModuleInit {
       statement_connections: connections.map((c) => ({ channel: c.channel, status: c.status, findings: c.validationFindings, ownership: sensitive ? c.ownershipConfidence : undefined, period: [c.periodStart, c.periodEnd], at: c.createdAt })),
       documents_stored: storedDocs.map((d) => ({ id: d.id, kind: d.kind, filename: d.filename, size: d.sizeBytes, scan: d.scanStatus })),
       offers: offers.map((o) => ({ reference: o.reference, status: o.status, tenor: o.tenorMonths, financing: n(o.financingAmountKobo), profit: n(o.profitKobo), dsp: n(o.deferredSalePriceKobo), monthly: n(o.monthlyRepaymentKobo), markup_bps: o.markupBps, expires_at: o.expiresAt, policy_version_id: o.policyVersionId })),
-      araf: araf ? { status: araf.status, reference: araf.arafReference, attempts: araf.attempts, last_error: araf.lastError, events: arafEvents.map((e) => ({ stage: e.stage, sequence: e.sequence, outcome: e.outcome, note: e.note, actor: e.actorName, at: e.occurredAt })) } : null,
+      araf: araf ? { status: araf.status, reference: araf.arafReference, attempts: araf.attempts, last_error: araf.lastError, events: arafEvents.map((e) => ({ stage: e.stage, sequence: e.sequence, outcome: e.outcome, note: e.note, actor: e.actorName, at: e.occurredAt })), outbound_reports: await this.arafReports.forApplication(id) } : null,
       conditions: conds.map((c) => ({ code: c.code, description: c.description, status: c.status, evidence: c.evidenceRef, satisfied_at: c.satisfiedAt })),
       financing_documents: docs.map((d) => ({ id: d.id, type: d.docType, version: d.version, status: d.status, signed_at: d.signedAt })),
       mandate: mandate ? { status: mandate.status, reference: mandate.mandateReference, failure: mandate.failureCode } : null,

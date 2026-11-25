@@ -9,6 +9,7 @@ import { ArafService } from '../araf/araf.service';
 import { StatementsService } from '../customer/statements.service';
 import { OperationsService } from '../operations/operations.service';
 import { CheckoutService } from '../checkout/checkout.service';
+import { ArafReportingService } from '../araf/araf-reporting.service';
 
 /**
  * Durable background processing. The transactional outbox is the source of truth; handlers
@@ -29,6 +30,7 @@ export class WorkerService {
     private readonly statements: StatementsService,
     private readonly ops: OperationsService,
     private readonly checkout: CheckoutService,
+    private readonly arafReports: ArafReportingService,
   ) {}
 
   async processOutbox(batch = 50): Promise<number> {
@@ -86,6 +88,7 @@ export class WorkerService {
     r.mandates = await this.ops.pollMandates();
     r.refunds = await this.ops.pollRefunds();
     r.araf = await this.araf.retryDueSubmissions();
+    r.arafReports = await this.arafReports.deliverDue();
     if (this.ticks % 30 === 0) r.expired = await this.checkout.expireStaleSessions();
     if (this.ticks % 900 === 0) await this.ops.runReconciliation({ ...SYSTEM_ACTOR, label: 'Scheduled reconciliation' });
     return r;

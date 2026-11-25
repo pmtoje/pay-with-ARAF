@@ -16,6 +16,7 @@ import { AppContextService } from '../applications/app-context.service';
 import { customerStatus, n } from '../applications/presenters';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ArafReportingService } from '../araf/araf-reporting.service';
 import { CUSTOMER_COOKIE, type AuthedRequest } from '../auth/auth.guard';
 
 export const CONSENTS = {
@@ -67,6 +68,7 @@ export class JourneyService {
     private readonly webhooks: WebhooksService,
     private readonly notifications: NotificationsService,
     private readonly moduleRef: ModuleRef,
+    private readonly arafReports: ArafReportingService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -619,6 +621,7 @@ export class JourneyService {
       await tx.checkoutSession.update({ where: { id: app.checkoutSessionId }, data: { status: 'CANCELLED' } });
       await tx.cancellationRequest.create({ data: { applicationId, initiatedBy: 'CUSTOMER', stage: app.status, reason: 'Customer cancelled', status: 'COMPLETED', requiresReversal: false } });
       await this.emitMerchant(tx, app, 'application.cancelled');
+      await this.arafReports.record(tx, app, 'APPLICATION_CANCELLED', { reason: 'CUSTOMER_CANCELLED' });
     });
     return this.view(applicationId, req);
   }

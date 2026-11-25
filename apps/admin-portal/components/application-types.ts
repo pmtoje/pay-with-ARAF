@@ -33,7 +33,7 @@ export interface AppDetail {
   statement_connections: Array<{ channel: string; status: string; findings: unknown; ownership?: string | number | null; period: [string | null, string | null]; at: string }>;
   documents_stored: Array<{ id: string; kind: string; filename: string; size: number; scan: string }>;
   offers: Array<{ reference: string; status: string; tenor: number; financing: number; profit: number; dsp: number; monthly: number; markup_bps: number; expires_at: string; policy_version_id: string }>;
-  araf: { status: string; reference: string | null; attempts: number; last_error: string | null; events: Array<{ stage: string; sequence: number; outcome: string; note: string | null; actor: string | null; at: string }> } | null;
+  araf: { status: string; reference: string | null; attempts: number; last_error: string | null; events: Array<{ stage: string; sequence: number; outcome: string; note: string | null; actor: string | null; at: string }>; outbound_reports?: Array<{ event_id: string; sequence: number; type: string; status: string; attempts: number; last_error: string | null; delivered_at: string | null; created_at: string; data: Record<string, unknown> }> } | null;
   conditions: Array<{ code: string; description: string; status: string; evidence: string | null; satisfied_at: string | null }>;
   financing_documents: Array<{ id: string; type: string; version: number; status: string; signed_at: string | null }>;
   mandate: { status: string; reference: string | null; failure: string | null } | null;

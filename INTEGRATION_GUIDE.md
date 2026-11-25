@@ -54,7 +54,7 @@ Interfaces: `packages/integrations/src/interfaces.ts`. To go live with a provide
 | AccountOpeningProvider | AltBank account opening | Signed callback + authoritative result lookup |
 | StatementAcquisitionProvider | Mono | Code exchange server-side; no banking passwords |
 | StatementAnalysisProvider | Periculum | Async jobs; provider data never overrides Bank policy |
-| ArafWorkflowProvider | Existing ARAF | Idempotent submit + lookup by key; HMAC/mTLS status events |
+| ArafWorkflowProvider | Existing ARAF | Idempotent submit + lookup by key; inbound HMAC/mTLS status events; outbound `reportStatus` (execution outcomes, ordered by `sequence`, idempotent on `eventId`) |
 | RepaymentMandateProvider | Remita | Authoritative status verification |
 | VendorPaymentProvider | Bank payment rail | Idempotent initiation; status query; refunds |
 | NotificationProvider | Bank SMS/email | Templates without sensitive data |

@@ -1012,6 +1012,27 @@ model ArafSubmission {
   @@map("araf_submissions")
 }
 
+/// Execution status reported back to ARAF (durable, written in the same transaction as the change).
+model ArafOutboundReport {
+  id            String    @id // event id sent to ARAF (idempotency key)
+  applicationId String
+  arafReference String
+  type          String
+  sequence      Int
+  data          Json
+  status        String    @default("PENDING") // PENDING | RETRYING | DELIVERED | FAILED
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  arafEventReference String?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([applicationId, sequence])
+  @@index([status, nextAttemptAt])
+  @@map("araf_outbound_reports")
+}
+
 model ArafStatusEvent {
   id            String   @id @default(uuid())
   applicationId String
