@@ -86,10 +86,20 @@ idempotency key + authenticated status events (`POST /api/callbacks/araf`, HMAC)
 simulator (staff-operated, maker-checker on approval) emits the same events. The proposed
 stage list is **not** the Bank's approval hierarchy, which must be inherited from ARAF.
 
-### D-013 — Booking & vendor-payment execution ownership — **NEEDS BANK DECISION (Operations/CAD/Finance)**
-Pay with ARAF orchestrates booking and vendor payment through adapters, gated by ARAF approval
-and conditions, with maker-checker for payments. If ARAF itself executes these, the adapters
-become status consumers; the gates remain.
+### D-013 — Booking & vendor-payment execution ownership — **DECIDED (2026-11-25, product owner)**
+**Decision.** Pay with ARAF executes financing booking (core banking) and vendor payment itself,
+through its adapters. ARAF remains the authoritative source of the *approval*; Pay with ARAF
+executes only after the ARAF approval event and all preconditions are satisfied.
+**Controls that follow from this ownership** (already implemented): CAD verifies the vendor
+invoice and requests booking (`booking.execute`); booking is idempotent and reconciled before any
+retry; settlement creates the payment instruction (maker) and finance approves it (checker,
+enforced in service and database); one live instruction per application; payment timeouts become
+UNKNOWN and are reconciled, never re-initiated; release only via the release gate.
+**Consequences.** Pay with ARAF must be onboarded to the core banking booking API and the payment
+rail as an authorised originating system: service accounts, transaction limits, segregation of
+duties, Finance and CAD operating procedures, and daily reconciliation with core banking and rail
+statements become production gates (see PRODUCTION_READINESS.md). Status changes are reported back
+to ARAF so its case record stays complete (event contract still to be agreed with the ARAF team).
 
 ### D-014 — Live adapters fail closed
 Without contracted specifications we do not invent endpoint formats. Every live adapter throws

@@ -17,6 +17,8 @@
 | Confirmed Remita integration | Technology / Operations | Outstanding |
 | Confirmed core banking integration (exposure, booking) | Technology / CAD | Outstanding |
 | Confirmed vendor payment integration | Finance / Technology | Outstanding |
+| Pay with ARAF authorised as booking/payment originator (service accounts, limits, SoD, CAD/Finance procedures) — D-013 | CAD / Finance / InfoSec | Outstanding |
+| Outbound booking/payment status reporting to ARAF (event contract) — D-013 | Technology / Credit Admin | Outstanding |
 | Approved credit policy (all PROPOSED values in BUSINESS_RULES.md) | Credit Risk | Outstanding |
 | Approved financing product structure | Product / Credit / Legal | Outstanding |
 | Approved Shariah contractual sequence (DECISIONS D-011) | Shariah governance | Outstanding |
@@ -64,6 +66,6 @@
 
 ## Business decisions requiring approval
 D-004 brand · D-005 score bands · D-007 obligations source · D-008 exposure definition ·
-D-010 partial financing · D-011 contractual sequence · D-013 booking/payment ownership · offer and
+D-010 partial financing · D-011 contractual sequence · offer and
 assessment validity windows · minimum financing amount (₦20,000) · age limits (18–65) ·
 business-owner affordability model · thin-file policy · notification templates and consent texts.
