@@ -1,9 +1,11 @@
 {
   "name": "pay-with-araf",
   "private": true,
-  "description": "Pay with ARAF — embedded non-interest financing gateway of The Alternative Bank (sandbox build)",
+  "description": "Pay with ARAF \u2014 embedded non-interest financing gateway of The Alternative Bank (sandbox build)",
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "turbo run build",
     "build:packages": "turbo run build --filter=./packages/*",
@@ -26,5 +28,16 @@
     "typescript": "5.9.3",
     "prettier": "3.6.2",
     "@types/node": "22.18.12"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": "0.35.5",
+      "effect": "3.22.1",
+      "deepmerge-ts": "8.0.0",
+      "multer": "2.5.0",
+      "path-to-regexp@8": "8.4.0",
+      "file-type": "21.3.2",
+      "postcss": "8.5.33"
+    }
   }
 }

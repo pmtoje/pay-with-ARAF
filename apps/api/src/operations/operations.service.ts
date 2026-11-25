@@ -573,7 +573,7 @@ export class OperationsService implements OnModuleInit {
       if (release && release.status === 'AUTHORIZED') {
         await tx.releaseAuthorization.update({ where: { id: release.id }, data: { status: 'SUSPENDED', suspendedAt: new Date(), suspensionReason: 'VENDOR_PAYMENT_REVERSED' } });
         await this.state.recordTransition(tx, 'RELEASE', release.id, 'AUTHORIZED', 'SUSPENDED', actor, app.id, 'VENDOR_PAYMENT_REVERSED');
-        await this.emit(tx, app, 'goods.release_suspended', { release_reference: release.reference, release_authorized: false, reason: 'VENDOR_PAYMENT_REVERSED' });
+        await this.emit(tx, app, 'goods.release_suspended', { release_reference: release.reference, status: 'ON_HOLD', release_authorized: false, reason: 'VENDOR_PAYMENT_REVERSED' });
         await this.notifications.enqueue(tx, { environment: app.environment, audience: 'PARTNER', channel: 'IN_APP', templateCode: 'PARTNER_RELEASE_SUSPENDED', destination: app.partnerId, partnerId: app.partnerId, applicationId: app.id, applicationReference: app.reference, vars: { order: app.reference } });
       }
       if (!['GOODS_DISPATCHED', 'GOODS_DELIVERED', 'COMPLETED'].includes(app.status)) {
@@ -677,7 +677,7 @@ export class OperationsService implements OnModuleInit {
       await tx.releaseAuthorization.update({ where: { id: r.id }, data: { status: 'SUSPENDED', suspendedAt: new Date(), suspensionReason: reason } });
       await tx.financingApplication.update({ where: { id: app.id }, data: { holds: { push: 'COMPLIANCE_HOLD' } } });
       await this.state.recordTransition(tx, 'RELEASE', r.id, 'AUTHORIZED', 'SUSPENDED', actor, app.id, reason);
-      await this.emit(tx, app, 'goods.release_suspended', { release_reference: r.reference, release_authorized: false });
+      await this.emit(tx, app, 'goods.release_suspended', { release_reference: r.reference, status: 'ON_HOLD', release_authorized: false });
       await this.audit.record(actor, { action: 'release.suspended', resourceType: 'RELEASE_AUTHORIZATION', resourceId: r.id, partnerId: app.partnerId, reason }, tx);
     });
     return { status: 'SUSPENDED' };
@@ -795,7 +795,7 @@ export class OperationsService implements OnModuleInit {
       const release = await tx.releaseAuthorization.findUnique({ where: { applicationId: app.id } });
       if (release?.status === 'AUTHORIZED') {
         await tx.releaseAuthorization.update({ where: { id: release.id }, data: { status: 'SUSPENDED', suspendedAt: new Date(), suspensionReason: 'CANCELLATION_REQUESTED' } });
-        await this.emit(tx, app, 'goods.release_suspended', { release_reference: release.reference, release_authorized: false, reason: 'CANCELLATION_REQUESTED' });
+        await this.emit(tx, app, 'goods.release_suspended', { release_reference: release.reference, status: 'ON_HOLD', release_authorized: false, reason: 'CANCELLATION_REQUESTED' });
       }
       return { status: 'CANCELLATION_REQUESTED', requires_reversal: true, cancellation_id: c.id };
     });

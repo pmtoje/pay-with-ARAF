@@ -79,14 +79,17 @@ function NotificationsBell() {
     const t = setInterval(reload, 60_000);
     return () => clearInterval(t);
   }, [reload]);
-  const unread = (data ?? []).filter((n) => !n.readAt).length;
+  const unread = (data ?? []).filter((n) => !n.read_at).length;
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => {
           setOpen(!open);
-          if (!open) reload();
+          if (!open && unread > 0) {
+            // Opening the panel marks the listed notifications as read.
+            void api.post('/api/partner-portal/notifications/read', { ids: (data ?? []).filter((n) => !n.read_at).map((n) => n.id) }).then(reload, reload);
+          } else if (!open) reload();
         }}
         aria-expanded={open}
         aria-haspopup="true"
@@ -115,7 +118,7 @@ function NotificationsBell() {
                   <li key={n.id} className="px-4 py-3">
                     <p className="text-sm font-medium text-fg">{n.subject}</p>
                     <p className="mt-0.5 whitespace-pre-line text-sm text-muted">{n.body}</p>
-                    <p className="mt-1 text-2xs text-subtle">{formatDateTime(n.createdAt)}</p>
+                    <p className="mt-1 text-2xs text-subtle">{formatDateTime(n.created_at)}</p>
                   </li>
                 ))}
               </ul>

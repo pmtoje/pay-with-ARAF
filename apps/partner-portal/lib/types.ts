@@ -226,12 +226,11 @@ export interface Team {
 
 export interface PartnerNotification {
   id: string;
-  templateCode: string;
+  template: string;
   subject: string;
   body: string;
-  status: string;
-  readAt: string | null;
-  createdAt: string;
+  read_at: string | null;
+  created_at: string;
 }
 
 export interface SessionRow {

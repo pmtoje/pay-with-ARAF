@@ -15,7 +15,7 @@ const schema = z.object({
   DEVELOPER_PORTAL_URL: z.string().url(),
   ENCRYPTION_KEYS: z.string().transform((s, ctx) => {
     try {
-      return z.record(z.string()).parse(JSON.parse(s));
+      return z.record(z.string(), z.string()).parse(JSON.parse(s));
     } catch {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'ENCRYPTION_KEYS must be a JSON object' });
       return z.NEVER;

@@ -127,32 +127,26 @@ export interface Param {
 }
 
 export function ParamTable({ params, caption }: { params: Param[]; caption?: string }) {
+  // Definition list: two columns on wide screens, stacked on phones (no horizontal scrolling).
   return (
-    <div className="my-5 overflow-x-auto rounded-lg border border-border">
-      <table className="w-full border-collapse text-sm">
-        {caption && <caption className="sr-only">{caption}</caption>}
-        <thead className="bg-surface-2">
-          <tr>
-            <th scope="col" className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-subtle">Field</th>
-            <th scope="col" className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-subtle">Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          {params.map((p) => (
-            <tr key={p.name} className="border-t border-border align-top">
-              <td className="whitespace-nowrap px-4 py-3">
-                <code className="!border-0 !bg-transparent !p-0 font-mono text-[13px] font-semibold text-fg">{p.name}</code>
-                <div className="mt-0.5 text-xs text-muted">
-                  {p.type}
-                  {p.required ? <span className="ml-1.5 font-semibold text-danger">required</span> : <span className="ml-1.5 text-subtle">optional</span>}
-                </div>
-              </td>
-              <td className="px-4 py-3 text-fg/90">{p.description}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <dl aria-label={caption} className="my-5 divide-y divide-border overflow-hidden rounded-lg border border-border">
+      <div className="hidden bg-surface-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-subtle sm:grid sm:grid-cols-[minmax(11rem,16rem)_1fr] sm:gap-4" aria-hidden="true">
+        <span>Field</span>
+        <span>Description</span>
+      </div>
+      {params.map((p) => (
+        <div key={p.name} className="grid gap-1 px-4 py-3 sm:grid-cols-[minmax(11rem,16rem)_1fr] sm:gap-4">
+          <dt className="min-w-0">
+            <code className="!border-0 !bg-transparent !p-0 break-all font-mono text-[13px] font-semibold text-fg">{p.name}</code>
+            <div className="mt-0.5 text-xs text-muted">
+              {p.type}
+              {p.required ? <span className="ml-1.5 font-semibold text-danger">required</span> : <span className="ml-1.5 text-subtle">optional</span>}
+            </div>
+          </dt>
+          <dd className="min-w-0 text-fg/90">{p.description}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

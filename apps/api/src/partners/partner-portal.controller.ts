@@ -231,6 +231,40 @@ export class PartnerPortalController {
     return this.partners.createWebhookEndpoint(this.pid(req), body, req.actor);
   }
 
+  /** Sandbox: send a clearly-flagged test event of any type to the partner's endpoints. */
+  @Post('webhooks/test-event')
+  @HttpCode(202)
+  @PartnerUser('p.integration.manage')
+  async testEvent(@Body() body: unknown, @Ctx() req: AuthedRequest) {
+    if (!this.config.isSandbox) throw new AppError('NOT_FOUND');
+    const { type } = z.object({ type: z.enum(ALL_WEBHOOK_EVENT_TYPES as [WebhookEventType, ...WebhookEventType[]]) }).strict().parse(body);
+    const id = await this.prisma.$transaction((tx) =>
+      this.webhooks.emit(tx, {
+        partnerId: this.pid(req),
+        environment: 'SANDBOX',
+        type,
+        applicationReference: 'ARAF-TEST-000000',
+        merchantOrderReference: 'TEST-ORDER',
+        resourceVersion: 0,
+        test: true,
+        data: type === 'goods.release_authorized' ? { currency: 'NGN', vendor_payment_amount: 45000000, payment_reference: 'PAY-TEST', payment_status: 'CONFIRMED', release_authorized: true, release_reference: 'REL-TEST', note: 'TEST EVENT — do not release goods' } : { status: 'TEST' },
+      }),
+    );
+    await this.audit.record(req.actor, { action: 'webhook.test_event_sent', resourceType: 'WEBHOOK_EVENT', resourceId: id, partnerId: this.pid(req) });
+    return { event_id: id };
+  }
+
+  @Get('api-logs')
+  @PartnerUser('p.integration.read')
+  async apiLogs(@Query() q: Record<string, string>, @Ctx() req: AuthedRequest) {
+    const rows = await this.prisma.apiRequestLog.findMany({
+      where: { partnerId: this.pid(req), environment: this.config.PLATFORM_ENVIRONMENT, statusCode: q.errors_only === 'true' ? { gte: 400 } : undefined },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return rows.map((r) => ({ id: r.id, method: r.method, path: r.path, status: r.statusCode, duration_ms: r.durationMs, correlation_id: r.correlationId, idempotency_key: r.idempotencyKey, credential_id: r.credentialId, at: r.createdAt }));
+  }
+
   @Post('webhooks/:id')
   @HttpCode(200)
   @PartnerUser('p.integration.manage')
@@ -268,44 +302,20 @@ export class PartnerPortalController {
     return { queued_deliveries: n };
   }
 
-  /** Sandbox: send a clearly-flagged test event of any type to the partner's endpoints. */
-  @Post('webhooks/test-event')
-  @HttpCode(202)
-  @PartnerUser('p.integration.manage')
-  async testEvent(@Body() body: unknown, @Ctx() req: AuthedRequest) {
-    if (!this.config.isSandbox) throw new AppError('NOT_FOUND');
-    const { type } = z.object({ type: z.enum(ALL_WEBHOOK_EVENT_TYPES as [WebhookEventType, ...WebhookEventType[]]) }).strict().parse(body);
-    const id = await this.prisma.$transaction((tx) =>
-      this.webhooks.emit(tx, {
-        partnerId: this.pid(req),
-        environment: 'SANDBOX',
-        type,
-        applicationReference: 'ARAF-TEST-000000',
-        merchantOrderReference: 'TEST-ORDER',
-        resourceVersion: 0,
-        test: true,
-        data: type === 'goods.release_authorized' ? { currency: 'NGN', vendor_payment_amount: 45000000, payment_reference: 'PAY-TEST', payment_status: 'CONFIRMED', release_authorized: true, release_reference: 'REL-TEST', note: 'TEST EVENT — do not release goods' } : { status: 'TEST' },
-      }),
-    );
-    await this.audit.record(req.actor, { action: 'webhook.test_event_sent', resourceType: 'WEBHOOK_EVENT', resourceId: id, partnerId: this.pid(req) });
-    return { event_id: id };
-  }
-
-  @Get('api-logs')
-  @PartnerUser('p.integration.read')
-  async apiLogs(@Query() q: Record<string, string>, @Ctx() req: AuthedRequest) {
-    const rows = await this.prisma.apiRequestLog.findMany({
-      where: { partnerId: this.pid(req), environment: this.config.PLATFORM_ENVIRONMENT, statusCode: q.errors_only === 'true' ? { gte: 400 } : undefined },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
-    return rows.map((r) => ({ id: r.id, method: r.method, path: r.path, status: r.statusCode, duration_ms: r.durationMs, correlation_id: r.correlationId, idempotency_key: r.idempotencyKey, credential_id: r.credentialId, at: r.createdAt }));
-  }
-
   @Get('notifications')
   @PartnerUser('p.dashboard.read')
-  notifications(@Ctx() req: AuthedRequest) {
-    return this.prisma.notification.findMany({ where: { audience: 'PARTNER', partnerId: this.pid(req) }, orderBy: { createdAt: 'desc' }, take: 50 });
+  async notifications(@Ctx() req: AuthedRequest) {
+    const rows = await this.prisma.notification.findMany({ where: { audience: 'PARTNER', partnerId: this.pid(req) }, orderBy: { createdAt: 'desc' }, take: 50 });
+    return rows.map((r) => ({ id: r.id, subject: r.subject, body: r.body, template: r.templateCode, read_at: r.readAt, created_at: r.createdAt }));
+  }
+
+  @Post('notifications/read')
+  @HttpCode(200)
+  @PartnerUser('p.dashboard.read')
+  async markRead(@Body() body: unknown, @Ctx() req: AuthedRequest) {
+    const { ids } = z.object({ ids: z.array(z.string().uuid()).max(100).optional() }).strict().parse(body ?? {});
+    const r = await this.prisma.notification.updateMany({ where: { audience: 'PARTNER', partnerId: this.pid(req), readAt: null, id: ids ? { in: ids } : undefined }, data: { readAt: new Date() } });
+    return { updated: r.count };
   }
 
   // ---- Team ------------------------------------------------------------------------------

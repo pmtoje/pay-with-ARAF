@@ -184,7 +184,7 @@ export class AuthService {
   }
 
   async listSessions(req: AuthedRequest) {
-    const rows = await this.prisma.session.findMany({ where: { userId: req.portal!.userId, revokedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } });
+    const rows = await this.prisma.session.findMany({ where: { userId: req.portal!.userId, revokedAt: null, mfaVerified: true, expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } });
     return { data: rows.map((s) => ({ id: s.id, created_at: s.createdAt, last_seen_at: s.lastSeenAt, ip_address: s.ipAddress, user_agent: s.userAgent, current: s.id === req.portal!.sessionId })) };
   }
 

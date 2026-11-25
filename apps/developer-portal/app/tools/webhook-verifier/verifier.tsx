@@ -124,7 +124,7 @@ export function Verifier() {
         </Alert>
         {!supported && <Alert tone="danger">WebCrypto is not available in this context. Use HTTPS or localhost.</Alert>}
         <Field label="Raw request body" required hint="Paste the exact bytes received — not re-formatted JSON.">
-          {({ id, describedBy }) => <Textarea id={id} aria-describedby={describedBy} spellCheck={false} className="min-h-[12rem] font-mono text-[12.5px] leading-5" value={body} onChange={(e) => setBody(e.target.value)} placeholder='{"event_id":"evt_…","event":"goods.release_authorized",…}' />}
+          {({ id, describedBy }) => <Textarea id={id} aria-describedby={describedBy} spellCheck={false} style={{ minHeight: "12rem" }} className="font-mono text-[12.5px] leading-5" value={body} onChange={(e) => setBody(e.target.value)} placeholder='{"event_id":"evt_…","event":"goods.release_authorized",…}' />}
         </Field>
         <Field label="ARAF-Signature header" required hint="e.g. t=1795600502,v1=5f1c…">
           {({ id, describedBy }) => <Input id={id} aria-describedby={describedBy} spellCheck={false} autoComplete="off" className="font-mono text-[13px]" value={header} onChange={(e) => setHeader(e.target.value)} placeholder="t=…,v1=…" />}

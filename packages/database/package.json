@@ -14,13 +14,13 @@
     "reset": "prisma migrate reset --force --skip-seed && node dist/seed.js"
   },
   "dependencies": {
-    "@prisma/client": "6.19.0",
+    "@prisma/client": "6.19.3",
     "@araf/business-rules": "workspace:*",
     "@araf/security": "workspace:*",
     "@araf/types": "workspace:*"
   },
   "devDependencies": {
-    "prisma": "6.19.0",
+    "prisma": "6.19.3",
     "typescript": "5.9.3",
     "@types/node": "22.18.12"
   }

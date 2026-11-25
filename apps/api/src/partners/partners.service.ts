@@ -79,7 +79,7 @@ export const credentialSchema = z
   .object({
     name: text(80),
     scopes: z.array(z.enum(ALL_API_SCOPES as [ApiScope, ...ApiScope[]])).min(1),
-    ip_allowlist: z.array(z.string().ip()).max(20).default([]),
+    ip_allowlist: z.array(z.union([z.ipv4(), z.ipv6()])).max(20).default([]),
     expires_in_days: z.number().int().min(1).max(730).optional(),
   })
   .strict();

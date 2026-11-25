@@ -278,7 +278,7 @@ export function Explorer() {
             </Field>
             {endpoint.method === 'POST' && (
               <Field label="JSON body" error={bodyError} hint={endpoint.id === 'create-session' ? 'Amounts in integer kobo. The order reference is randomised so you can create sessions repeatedly.' : undefined}>
-                {({ id, describedBy, invalid }) => <Textarea id={id} aria-describedby={describedBy} aria-invalid={invalid} spellCheck={false} className="min-h-[18rem] font-mono text-[12.5px] leading-5" value={body} onChange={(e) => setBody(e.target.value)} />}
+                {({ id, describedBy, invalid }) => <Textarea id={id} aria-describedby={describedBy} aria-invalid={invalid} spellCheck={false} style={{ minHeight: "18rem" }} className="font-mono text-[12.5px] leading-5" value={body} onChange={(e) => setBody(e.target.value)} />}
               </Field>
             )}
             {endpoint.body && (

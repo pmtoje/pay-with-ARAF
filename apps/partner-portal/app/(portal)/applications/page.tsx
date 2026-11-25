@@ -138,8 +138,8 @@ function ApplicationsInner() {
                 onRowClick={(r) => router.push(`/applications/${encodeURIComponent(r.reference)}`)}
                 empty={<EmptyState title={search || status ? 'No applications match these filters' : 'No applications in this period'} description={search || status ? 'Try a different reference, status or date range.' : 'Applications appear here when customers choose Pay with ARAF at checkout.'} />}
                 columns={[
-                  { key: 'ref', header: 'Application', cell: (r) => <Mono className="font-medium">{r.reference}</Mono>, sortValue: (r) => r.reference },
-                  { key: 'order', header: 'Order ref', cell: (r) => <Mono>{r.merchant_order_reference ?? '—'}</Mono>, sortValue: (r) => r.merchant_order_reference ?? '' },
+                  { key: 'ref', header: 'Application', cell: (r) => <Mono className="whitespace-nowrap font-medium">{r.reference}</Mono>, sortValue: (r) => r.reference },
+                  { key: 'order', header: 'Order ref', cell: (r) => <Mono className="whitespace-nowrap">{r.merchant_order_reference ?? "—"}</Mono>, sortValue: (r) => r.merchant_order_reference ?? '' },
                   { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status} label={MERCHANT_STATUS_LABEL[r.status]} />, sortValue: (r) => r.status },
                   { key: 'amount', header: 'Purchase amount', align: 'right', cell: (r) => formatNaira(r.purchase_amount), sortValue: (r) => r.purchase_amount ?? 0 },
                   { key: 'created', header: 'Created', cell: (r) => <span className="whitespace-nowrap text-muted">{formatDateTime(r.created_at)}</span>, sortValue: (r) => r.created_at },
