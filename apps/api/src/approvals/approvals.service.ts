@@ -8,6 +8,7 @@ import { AuditService, ReferenceService, toJsonRaw, type Actor } from '../common
 export type ApprovalType =
   | 'PARTNER_APPROVAL'
   | 'PARTNER_CONFIG'
+  | 'PARTNER_PORTAL'
   | 'PARTNER_PRODUCTION'
   | 'PARTNER_REACTIVATION'
   | 'VENDOR_ACCOUNT'
@@ -20,6 +21,7 @@ export type ApprovalType =
 export const APPROVAL_PERMISSION: Record<ApprovalType, PermissionCode> = {
   PARTNER_APPROVAL: 'partner.approve',
   PARTNER_CONFIG: 'partner.approve',
+  PARTNER_PORTAL: 'partner.approve',
   PARTNER_PRODUCTION: 'partner.production.approve',
   PARTNER_REACTIVATION: 'partner.approve',
   VENDOR_ACCOUNT: 'vendor.approve',

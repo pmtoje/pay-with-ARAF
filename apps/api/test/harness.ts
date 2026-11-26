@@ -104,7 +104,16 @@ export async function loginPortal(h: Harness, portal: 'admin' | 'partner', email
   const login = await agent.post(`/api/auth/${portal}/login`).send({ email, password });
   if (login.status !== 200) throw new Error(`login ${email}: ${login.status} ${JSON.stringify(login.body)}`);
   const csrf1 = csrfFrom(login, `araf_csrf_${portal}`);
-  const mfa = await agent.post(`/api/auth/${portal}/mfa`).set('x-csrf-token', csrf1).send({ code: nextTotp(totpSecret) });
+  // Test files share one database but not memory: start after the last step the server accepted
+  // for this user (replay protection), waiting for the clock if that step is not yet valid.
+  const cred = await h.prisma.mfaCredential.findFirst({ where: { user: { email: email.toLowerCase() }, verifiedAt: { not: null } }, orderBy: { createdAt: 'desc' } });
+  const dbStep = cred?.lastUsedStep !== null && cred?.lastUsedStep !== undefined ? Number(cred.lastUsedStep) : 0;
+  usedSteps.set(totpSecret, Math.max(usedSteps.get(totpSecret) ?? 0, dbStep));
+  const code = nextTotp(totpSecret);
+  const step = usedSteps.get(totpSecret)!;
+  const waitMs = step * 30_000 - 30_000 - Date.now(); // the verifier accepts one step ahead
+  if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs + 200));
+  const mfa = await agent.post(`/api/auth/${portal}/mfa`).set('x-csrf-token', csrf1).send({ code });
   if (mfa.status !== 200) throw new Error(`mfa ${email}: ${mfa.status} ${JSON.stringify(mfa.body)}`);
   const csrf = mfa.body.csrf_token as string;
   return {

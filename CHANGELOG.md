@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 — 2026-11-26
+### Added
+- Super Admin configures the partner side (D-030): admin → Partner → *Partner portal* (sections,
+  checkout button style / amount, user limit, Bank support contacts), approved by a Partner
+  Approving Officer; enforced in the API for every partner user; migration
+  `20261126150000_partner_portal_settings`; 1 new API test.
+
 ## 0.3.1 — 2026-11-26
 ### Added
 - araf.ng domain plan (D-029): production and sandbox environment templates, nginx reverse-proxy

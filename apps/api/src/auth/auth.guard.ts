@@ -1,3 +1,4 @@
+import { disabledPortalPermissions, effectivePortalSettings } from '@araf/types';
 import { CanActivate, ExecutionContext, Inject, Injectable, SetMetadata, createParamDecorator } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
@@ -124,6 +125,11 @@ export class AuthGuard implements CanActivate {
     }
     const activeRoles = user.roles.filter((r) => !r.expiresAt || r.expiresAt.getTime() > now);
     const permissions = new Set(activeRoles.flatMap((r) => r.role.permissions.map((p) => p.permission.code)));
+    if (spec.portal === 'PARTNER' && user.partnerId) {
+      // Sections the Bank switched off for this partner are removed whatever the user's role.
+      const partner = await this.prisma.partner.findUnique({ where: { id: user.partnerId }, select: { portalSettings: true } });
+      for (const p of disabledPortalPermissions(effectivePortalSettings(partner?.portalSettings))) permissions.delete(p);
+    }
     req.portal = {
       sessionId: session.id,
       userId: user.id,

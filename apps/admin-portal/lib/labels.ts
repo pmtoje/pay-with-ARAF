@@ -20,6 +20,7 @@ export const PARTNER_STATUSES = [
 export const APPROVAL_TYPES: Record<string, { label: string; permission: string }> = {
   PARTNER_APPROVAL: { label: 'Partner onboarding', permission: 'partner.approve' },
   PARTNER_CONFIG: { label: 'Partner configuration', permission: 'partner.approve' },
+  PARTNER_PORTAL: { label: 'Partner portal settings', permission: 'partner.approve' },
   PARTNER_PRODUCTION: { label: 'Production activation', permission: 'partner.production.approve' },
   PARTNER_REACTIVATION: { label: 'Partner reactivation', permission: 'partner.approve' },
   VENDOR_ACCOUNT: { label: 'Vendor settlement account', permission: 'vendor.approve' },

@@ -13,6 +13,7 @@ export const PERMISSIONS = {
   'partner.create': 'Create and edit partner onboarding records (maker)',
   'partner.approve': 'Approve / reject partner onboarding and configuration (checker)',
   'partner.suspend': 'Suspend or terminate partners',
+  'partner.portal.configure': 'Propose partner-side (partner portal) settings for a partner (maker)',
   'partner.production.request': 'Request production activation for a partner',
   'partner.production.approve': 'Approve production activation',
   'vendor.manage': 'Create vendors and settlement accounts (maker)',
@@ -78,8 +79,8 @@ export const BANK_ROLES: RoleDefinition[] = [
     code: 'SUPER_ADMIN',
     name: 'Super Administrator',
     scope: 'STAFF',
-    description: 'Platform administration. Deliberately has NO access to customer financial data and cannot approve credit or payments.',
-    permissions: ['partner.read', 'user.manage', 'integration.read', 'audit.read', 'report.read', 'policy.read'],
+    description: 'Platform administration and partner set-up (maker): creates and configures partners, their partner portal and vendors. Changes take effect only after a Partner Approving Officer approves. Deliberately has NO access to customer financial data and cannot approve partners, credit or payments.',
+    permissions: ['partner.read', 'partner.create', 'partner.portal.configure', 'partner.production.request', 'vendor.manage', 'user.manage', 'integration.read', 'audit.read', 'report.read', 'policy.read'],
   },
   {
     code: 'BUSINESS_ADMIN',

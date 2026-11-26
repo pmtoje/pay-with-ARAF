@@ -1,3 +1,4 @@
+import { effectivePortalSettings } from '@araf/types';
 import { Body, Controller, Get, HttpCode, Inject, Injectable, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
@@ -114,7 +115,8 @@ export class AuthService {
 
   async me(req: AuthedRequest) {
     const p = req.portal!;
-    const partner = p.partnerId ? await this.prisma.partner.findUnique({ where: { id: p.partnerId }, select: { id: true, partnerCode: true, tradingName: true, status: true } }) : null;
+    const found = p.partnerId ? await this.prisma.partner.findUnique({ where: { id: p.partnerId }, select: { id: true, partnerCode: true, tradingName: true, status: true, portalSettings: true } }) : null;
+    const partner = found ? { id: found.id, partnerCode: found.partnerCode, tradingName: found.tradingName, status: found.status, portal_settings: effectivePortalSettings(found.portalSettings) } : null;
     return {
       user: { id: p.userId, email: p.email, full_name: p.fullName, roles: p.roles, permissions: [...p.permissions].sort() },
       partner,

@@ -11,6 +11,7 @@ import { APPROVAL_TYPES, roleLabel } from '@/lib/labels';
 import { ActionDialog, ErrorAlert, Guard, Mono, Section } from '@/components/common';
 import { ConfigForm, ConfigSummary, PartnerDetailsForm, VendorManager, type PartnerDetail } from '@/components/partner-forms';
 import { Icon } from '@/components/icons';
+import { PartnerPortalSettings } from '@/components/partner-portal-settings';
 
 export default function PartnerPage() {
   return <Guard perm="partner.read"><Partner /></Guard>;
@@ -77,6 +78,7 @@ function Partner() {
           { id: 'config', label: 'Configuration', count: p.configurations.length },
           { id: 'vendors', label: 'Vendors', count: p.vendors.length },
           { id: 'integration', label: 'Integration' },
+          { id: 'portal', label: 'Partner portal' },
           { id: 'users', label: 'Users', count: p.users.length },
           { id: 'approvals', label: 'Approvals', count: p.approvals.length },
         ]}
@@ -174,6 +176,8 @@ function Partner() {
         )}
 
         {tab === 'vendors' && <Card className="p-5"><VendorManager partner={p} onChanged={state.reload} /></Card>}
+
+        {tab === 'portal' && p.portal && <PartnerPortalSettings partnerId={p.id} partnerName={p.trading_name} view={p.portal} onChanged={state.reload} />}
 
         {tab === 'integration' && (
           <>

@@ -101,6 +101,12 @@ export class AdminController {
     return this.partners.update(id, body, req.actor);
   }
 
+  @Post('partners/:id/portal-settings')
+  @Staff('partner.portal.configure')
+  proposePortalSettings(@Param('id') id: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {
+    return this.partners.proposePortalSettings(id, body, req.actor);
+  }
+
   @Post('partners/:id/configuration')
   @Staff('partner.create')
   proposeConfig(@Param('id') id: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {

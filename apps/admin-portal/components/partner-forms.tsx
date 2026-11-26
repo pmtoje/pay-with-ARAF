@@ -59,6 +59,7 @@ export interface PartnerDetail {
   created_at: string;
   configurations: PartnerConfig[];
   domains: Array<{ id: string; environment: string; kind: string; value: string; approved: boolean }>;
+  portal?: import('./partner-portal-settings').PortalView;
   checkout?: { sdk_url: string; api_base_url: string; button_label: string; embed_origins: string[]; pending_origins: string[] };
   vendors: Vendor[];
   status_history: Array<{ from: string | null; to: string; reason: string | null; at: string }>;

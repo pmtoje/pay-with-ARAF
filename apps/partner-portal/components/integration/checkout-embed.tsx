@@ -20,7 +20,11 @@ function Code({ title, code }: { title: string; code: string }) {
 /** Self-service: how this partner puts "Buy Now Pay Later with AltBank" on any website. */
 export function CheckoutEmbed({ data }: { data: Integration }) {
   const c = data.checkout;
-  const s = embedSnippets(c.sdk_url, data.api_base_url);
+  const btn = c.button ?? { theme: 'dark' as const, show_amount: true };
+  const s0 = embedSnippets(c.sdk_url, data.api_base_url);
+  // The Bank's Super Admin sets the button style for this partner; the snippet reflects it.
+  const s = { ...s0, html: btn.theme === 'gold' ? s0.html.replace("ArafCheckout.button('#altbank-bnpl', {", "ArafCheckout.button('#altbank-bnpl', {\n    theme: 'gold',") : s0.html };
+  const previewLabel = btn.show_amount ? `${c.button_label} — ₦645,000` : c.button_label;
   return (
     <div className="space-y-6">
       <Card>
@@ -36,9 +40,9 @@ export function CheckoutEmbed({ data }: { data: Integration }) {
                   <span className="font-semibold text-fg">{c.button_label}</span>
                   <span className="mt-0.5 block text-xs text-muted">Non-interest (Murabaha) financing by The Alternative Bank, subject to approval.</span>
                 </div>
-                <BnplButtonPreview />
+                <BnplButtonPreview label={previewLabel} className={btn.theme === 'gold' ? '!bg-[#b08a2e]' : ''} />
               </div>
-              <p className="mt-3 text-xs text-muted">The SDK renders this button with the standard label. Show the amount on your own button if you build it yourself, e.g. “{c.button_label} — ₦645,000”.</p>
+              <p className="mt-3 text-xs text-muted">Style set by the Bank for your account ({btn.theme}{btn.show_amount ? ', amount shown' : ''}). {btn.show_amount ? `Show the cart amount on the button, e.g. “${c.button_label} — ₦645,000”.` : ''}</p>
             </div>
             <div className="rounded-lg border border-border p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-subtle">Websites allowed to embed the checkout</p>
@@ -55,7 +59,7 @@ export function CheckoutEmbed({ data }: { data: Integration }) {
                 )}
               </ul>
               <p className="mt-3 text-xs leading-relaxed text-muted">
-                The checkout refuses to load inside any other website. To add a site, ask your relationship manager — the Bank approves it under maker–checker.
+                The checkout refuses to load inside any other website. To add a site, contact the Bank{c.support?.email ? ` (${c.support.email}${c.support.phone ? `, ${c.support.phone}` : ''})` : ''} — it is approved under maker–checker.
               </p>
               <div className="mt-4 flex items-center justify-between gap-3 rounded-md bg-surface-2 px-3 py-2 text-xs">
                 <span className="truncate">

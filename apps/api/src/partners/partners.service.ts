@@ -2,7 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { z } from 'zod';
 import { assertTransition } from '@araf/business-rules';
 import { generateApiKey, generateWebhookSecret, maskAccountNumber, randomToken, validateUrlSyntax, UnsafeUrlError } from '@araf/security';
-import { ALL_API_SCOPES, ALL_WEBHOOK_EVENT_TYPES, PARTNER_ROLES, type ApiScope } from '@araf/types';
+import { ALL_API_SCOPES, ALL_WEBHOOK_EVENT_TYPES, PARTNER_ROLES, type ApiScope, PARTNER_PORTAL_MODULES, effectivePortalSettings, partnerPortalSettingsSchema, type PartnerPortalModule } from '@araf/types';
 import type { ApprovalRequest, PartnerStatus } from '@araf/database';
 import { CONFIG, type AppConfig } from '../config';
 import { AppError, fail } from '../common/errors';
@@ -117,6 +117,12 @@ export class PartnersService implements OnModuleInit {
         await tx.partnerConfiguration.update({ where: { id: req.resourceId }, data: { status: 'REJECTED' } });
       },
     });
+    this.approvals.register('PARTNER_PORTAL', {
+      onApprove: async (tx, req) => {
+        const settings = partnerPortalSettingsSchema.parse((req.payload as { settings: unknown }).settings);
+        await tx.partner.update({ where: { id: req.resourceId }, data: { portalSettings: settings as object } });
+      },
+    });
     this.approvals.register('PARTNER_PRODUCTION', {
       onApprove: async (tx, req, checker) => {
         if (!this.config.LIVE_OPERATIONS_ENABLED || this.config.PLATFORM_ENVIRONMENT !== 'PRODUCTION') throw new AppError('PRODUCTION_LOCKED');
@@ -186,6 +192,7 @@ export class PartnersService implements OnModuleInit {
       ...this.presentPartner(p),
       configurations: p.configurations.map((c) => this.presentConfig(c)),
       domains: p.domains.map((d) => ({ id: d.id, environment: d.environment, kind: d.kind, value: d.value, approved: d.approved })),
+      portal: await this.portalSettingsView(id),
       checkout: {
         sdk_url: `${this.config.CHECKOUT_BASE_URL}/v1/araf.js`,
         api_base_url: `${this.config.PUBLIC_API_URL}/api/v1`,
@@ -661,6 +668,38 @@ export class PartnersService implements OnModuleInit {
     return { signing_secret: secret, previous_secret_valid_until: new Date(Date.now() + 24 * 3600_000) };
   }
 
+  // ---- Partner-side settings (Super Admin = maker, Partner Approving Officer = checker) -------
+
+  /** Propose partner portal settings. Nothing changes for the partner until a checker approves. */
+  async proposePortalSettings(partnerId: string, body: unknown, actor: Actor) {
+    const settings = partnerPortalSettingsSchema.parse(body);
+    const partner = await this.prisma.partner.findUnique({ where: { id: partnerId } });
+    if (!partner) throw new AppError('NOT_FOUND');
+    if (['REJECTED', 'TERMINATED'].includes(partner.status)) throw new AppError('INVALID_STATE');
+    const current = effectivePortalSettings(partner.portalSettings);
+    const off = Object.entries(settings.modules).filter(([, on]) => !on).map(([k]) => PARTNER_PORTAL_MODULES[k as PartnerPortalModule].label);
+    const summary = `Partner portal settings for ${partner.tradingName}: ${off.length ? `sections off — ${off.join(', ')}` : 'all sections on'}; button ${settings.checkout_button.theme}${settings.checkout_button.show_amount ? ' with amount' : ''}; up to ${settings.max_users} users`;
+    const approval = await this.prisma.$transaction(async (tx) => {
+      const a = await this.approvals.create(tx, { type: 'PARTNER_PORTAL', resourceType: 'PARTNER', resourceId: partnerId, partnerId, payload: { settings, previous: current }, summary }, actor);
+      await this.audit.record(actor, { action: 'partner.portal_settings_proposed', resourceType: 'PARTNER', resourceId: partnerId, partnerId, before: current, after: settings }, tx);
+      return a;
+    });
+    return { approval_reference: approval.reference, status: 'PENDING_APPROVAL', settings };
+  }
+
+  async portalSettingsView(partnerId: string) {
+    const partner = await this.prisma.partner.findUniqueOrThrow({ where: { id: partnerId }, select: { portalSettings: true } });
+    const pending = await this.prisma.approvalRequest.findFirst({ where: { type: 'PARTNER_PORTAL', resourceId: partnerId, status: 'PENDING' } });
+    const last = await this.prisma.approvalRequest.findFirst({ where: { type: 'PARTNER_PORTAL', resourceId: partnerId, status: 'APPROVED' }, orderBy: { decidedAt: 'desc' } });
+    return {
+      active: effectivePortalSettings(partner.portalSettings),
+      configured: partner.portalSettings !== null,
+      last_approved: last ? { reference: last.reference, decided_at: last.decidedAt } : null,
+      pending: pending ? { reference: pending.reference, settings: (pending.payload as { settings: unknown }).settings, created_at: pending.createdAt } : null,
+      modules: Object.entries(PARTNER_PORTAL_MODULES).map(([key, m]) => ({ key, label: m.label, description: m.description })),
+    };
+  }
+
   // ---- Team (partner portal) -----------------------------------------------------------
 
   async inviteTeamMember(partnerId: string, body: unknown, actor: Actor) {
@@ -670,6 +709,11 @@ export class PartnersService implements OnModuleInit {
       .parse(body);
     const exists = await this.prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
     if (exists) throw new AppError('CONFLICT', undefined, 'A user with this email already exists.');
+    // The Bank's Super Admin sets how many portal users each partner may have.
+    const partner = await this.prisma.partner.findUniqueOrThrow({ where: { id: partnerId }, select: { portalSettings: true } });
+    const limit = effectivePortalSettings(partner.portalSettings).max_users;
+    const seats = (await this.prisma.user.count({ where: { partnerId, status: { not: 'DISABLED' } } })) + (await this.prisma.userInvitation.count({ where: { partnerId, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } } }));
+    if (seats >= limit) throw new AppError('PARTNER_USER_LIMIT_REACHED', { limit });
     return this.prisma.$transaction((tx) => this.createInvitation(tx, { email: input.email, fullName: input.full_name, type: 'PARTNER', partnerId, roleCodes: [input.role] }, actor));
   }
 

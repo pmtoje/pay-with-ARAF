@@ -291,6 +291,8 @@ model Partner {
   status                PartnerStatus          @default(DRAFT)
   agreementVersion      String?
   agreementAcceptedAt   DateTime?
+  /// Partner-side (partner portal) settings set by the Super Admin and approved under maker-checker (null = defaults).
+  portalSettings        Json?
   createdById           String?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt

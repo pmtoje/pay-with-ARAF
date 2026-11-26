@@ -1,3 +1,4 @@
+import { effectivePortalSettings } from '@araf/types';
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
@@ -204,6 +205,8 @@ export class PartnerPortalController {
         sdk_url: `${this.config.CHECKOUT_BASE_URL}/v1/araf.js`,
         checkout_origin: new URL(this.config.CHECKOUT_BASE_URL).origin,
         button_label: 'Buy Now Pay Later with AltBank',
+        button: effectivePortalSettings(partner.portalSettings).checkout_button,
+        support: effectivePortalSettings(partner.portalSettings).support,
         embed_origins: domains.filter((d) => d.kind === 'RETURN_URL_ORIGIN' && d.environment === this.config.PLATFORM_ENVIRONMENT).map((d) => d.value),
       },
       configuration: config ? this.partners.presentConfig(config) : null,

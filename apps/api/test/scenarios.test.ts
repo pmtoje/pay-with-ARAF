@@ -315,6 +315,43 @@ describe('Sandbox scenarios and security controls', () => {
     await c.post('/cancel');
   });
 
+  it('Super Admin configures the partner side; it changes only after a Partner Approving Officer approves', async () => {
+    const p = await onboardPartner(h, { name: 'PortalCfgMall' });
+    const superAdmin = await staff(h, 'superadmin');
+    const onboarding = await staff(h, 'onboarding');
+    const checker = await staff(h, 'partner.approver');
+    const settings = {
+      modules: { applications: true, release: true, settlements: false, integration: true, team: true, exports: false },
+      checkout_button: { theme: 'gold', show_amount: true },
+      max_users: 1,
+      support: { email: 'partners@araf.ng', phone: '+2348000000000' },
+    };
+    // Only the Super Admin may propose; invalid settings are refused.
+    expect((await onboarding.post(`/api/admin/partners/${p.id}/portal-settings`, settings)).body.error.code).toBe('FORBIDDEN');
+    expect((await superAdmin.post(`/api/admin/partners/${p.id}/portal-settings`, { ...settings, max_users: 0 })).body.error.code).toBe('VALIDATION_FAILED');
+    const proposed = await superAdmin.post(`/api/admin/partners/${p.id}/portal-settings`, settings);
+    expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
+    // Nothing changes for the partner yet.
+    expect((await p.portal.get('/api/partner-portal/settlements')).status).toBe(200);
+    const pending = ((await checker.get('/api/admin/approvals?status=PENDING')).body as Array<{ id: string; type: string; partner_id: string }>).find((x) => x.type === 'PARTNER_PORTAL' && x.partner_id === p.id)!;
+    // The Super Admin cannot approve (no checker permission).
+    expect((await superAdmin.post(`/api/admin/approvals/${pending.id}/decide`, { decision: 'APPROVE', comment: 'self' })).status).toBe(403);
+    const ok = await checker.post(`/api/admin/approvals/${pending.id}/decide`, { decision: 'APPROVE', comment: 'Portal settings agreed with the partner' });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    // Switched-off sections disappear for every partner user, whatever their role.
+    const me = (await p.portal.get('/api/auth/partner/me')).body;
+    expect(me.user.permissions).not.toContain('p.settlement.read');
+    expect(me.user.permissions).toContain('p.application.read');
+    expect(me.partner.portal_settings.checkout_button).toEqual({ theme: 'gold', show_amount: true });
+    expect((await p.portal.get('/api/partner-portal/settlements')).body.error.code).toBe('FORBIDDEN');
+    const integ = (await p.portal.get('/api/partner-portal/integration')).body;
+    expect(integ.checkout.button).toEqual({ theme: 'gold', show_amount: true });
+    // The user limit set by the Bank is enforced (the partner admin already holds the only seat).
+    expect((await p.portal.post('/api/partner-portal/team/invitations', { email: `ops-${Date.now()}@portalcfg.example`, full_name: 'Ops User', role: 'PARTNER_FULFILMENT' })).body.error.code).toBe('PARTNER_USER_LIMIT_REACHED');
+    const detail = (await superAdmin.get(`/api/admin/partners/${p.id}`)).body;
+    expect(detail.portal).toMatchObject({ configured: true, pending: null, active: { max_users: 1 } });
+  }, 180_000);
+
   it('uncertain salary classification → review, not decline', async () => {
     const { c, ref } = await start('22200000015', '1992-12-12');
     await toStatement(c);

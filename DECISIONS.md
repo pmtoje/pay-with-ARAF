@@ -206,6 +206,18 @@ domain. Partner API on `api.araf.ng`, portals on `partners.` / `developers.`, ad
 cookie domain). See DEPLOYMENT.md → Domains. **Open:** domain registration under the Bank's name and
 the hosting platform choice (Technology).
 
+### D-030 — The partner side is configured by the Super Admin (maker-checker)
+Requested 2026-11-26. For each partner the Super Administrator sets what the partner sees on
+partners.araf.ng: which sections are available (applications, ready for release, settlements,
+integration, team, report exports — dashboard and security always on), the checkout button style
+and whether it shows the amount (the wording "Buy Now Pay Later with AltBank" is fixed), the maximum
+number of portal users, and the Bank support contacts shown to the partner. The Super Admin is the
+**maker** (new permission `partner.portal.configure`, plus partner set-up: create, vendors, production
+request); a Partner Approving Officer is the **checker** (approval type `PARTNER_PORTAL`). A section
+switched off is removed from every partner user's effective permissions, so it disappears from the
+menu and its API calls are refused. The Super Admin still cannot approve partners, credit or payments
+and has no access to customer financial data. All changes are audited.
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable
