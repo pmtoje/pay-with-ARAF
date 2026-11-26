@@ -756,8 +756,14 @@ export class JourneyService {
       terms_version: o.termsVersion,
       schedule: o.instalments.map((i) => ({ number: i.number, due_date: i.dueDate, amount: n(i.amountKobo) })),
     });
+    // The Bank's question when it asked for more information (shown only to the verified customer).
+    const infoRequest =
+      app.status === 'ADDITIONAL_INFORMATION_REQUIRED'
+        ? await this.prisma.arafStatusEvent.findFirst({ where: { applicationId: app.id, stage: 'INFO_REQUESTED', outcome: 'APPLIED' }, orderBy: { sequence: 'desc' }, select: { note: true, occurredAt: true } })
+        : null;
     return {
       ...base,
+      information_request: infoRequest ? { question: infoRequest.note ?? null, requested_at: infoRequest.occurredAt } : null,
       customer: customer ? { first_name: customer.firstName, bvn: `•••••••${customer.bvnLast4}`, phone: idv?.phoneMasked } : null,
       income_profile: app.incomeProfile,
       account: account ? { id: account.id, account_number: account.accountNumberMasked, account_name: account.accountName, product: account.productName, source: account.source } : null,

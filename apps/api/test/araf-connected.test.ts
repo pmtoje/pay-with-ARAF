@@ -118,13 +118,17 @@ describe('Connected to the real ARAF', () => {
     const submitted = araf.seen.find((s) => s.path === '/api/integrations/pay-with-araf/applications');
     expect(submitted?.valid).toBe(true);
     expect(JSON.parse(submitted!.body).application_reference).toBe(app.reference);
+    expect(JSON.parse(submitted!.body).partner_name).toBe('ConnectedMall');
     // No simulator case is created in connected mode.
     expect(await h.prisma.simArafCase.count({ where: { arafReference: app.arafReference! } })).toBe(0);
 
     const ref = app.arafReference!;
     expect((await callback(ref, 'UNDER_REVIEW')).status).toBe(200);
     expect((await callback(ref, 'INFO_REQUESTED', { note: 'Upload your latest payslip.' })).status).toBe(200);
-    expect((await c.state()).state).toBe('ADDITIONAL_INFORMATION_REQUIRED');
+    const asked = await c.state();
+    expect(asked.state).toBe('ADDITIONAL_INFORMATION_REQUIRED');
+    // The verified customer sees the Bank's question in the checkout.
+    expect(asked.information_request?.question).toBe('Upload your latest payslip.');
 
     const reply = await c.post('/information', { note: 'Payslip uploaded to the bank portal.' });
     expect(reply.status, JSON.stringify(reply.body)).toBe(200);

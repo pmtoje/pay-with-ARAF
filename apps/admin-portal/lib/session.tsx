@@ -10,6 +10,8 @@ export interface Me {
   mfa_verified: boolean;
   environment: 'SANDBOX' | 'PRODUCTION';
   sandbox: boolean;
+  /** Connected to the real ARAF (no built-in simulator). */
+  araf_connected?: boolean;
 }
 
 interface SessionValue {

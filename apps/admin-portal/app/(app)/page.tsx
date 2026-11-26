@@ -48,7 +48,7 @@ export default function OverviewPage() {
   useEffect(() => {
     document.title = 'Executive overview · Pay with ARAF admin';
     if (!allowed) {
-      const first = navFor(can, me.sandbox).find((n) => n.href !== '/');
+      const first = navFor(can, me.sandbox, me.araf_connected).find((n) => n.href !== '/');
       router.replace(first?.href ?? '/approvals');
     }
   }, [allowed, can, me.sandbox, router]);

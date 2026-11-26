@@ -69,6 +69,7 @@ export class ArafService {
     return {
       application_reference: app.reference,
       partner_id: partner.partnerCode,
+      partner_name: partner.tradingName,
       merchant_order_reference: order.merchantOrderReference,
       vendor_reference: vendor.vendorReference,
       customer: {

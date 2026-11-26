@@ -335,7 +335,7 @@ function Offers({ a }: { a: AppDetail }) {
 }
 
 function Araf({ a, onChanged }: { a: AppDetail; onChanged: () => void }) {
-  const { can } = useSession();
+  const { can, me } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -360,7 +360,11 @@ function Araf({ a, onChanged }: { a: AppDetail; onChanged: () => void }) {
             tone: e.stage === 'REJECTED' ? 'danger' : e.stage === 'APPROVED' ? 'success' : e.stage === 'INFO_REQUESTED' ? 'warning' : undefined,
           }))} />
         )}
-        <Link href="/araf-simulator" className="mt-4 inline-flex text-sm font-medium text-gold-strong hover:underline">Open the ARAF workflow simulator</Link>
+        {me.araf_connected ? (
+          <p className="mt-4 text-sm text-muted">Credit decisions are made in ARAF (Pay with ARAF → Checkout applications{a.araf.reference ? `, ${a.araf.reference}` : ''}).</p>
+        ) : (
+          <Link href="/araf-simulator" className="mt-4 inline-flex text-sm font-medium text-gold-strong hover:underline">Open the ARAF workflow simulator</Link>
+        )}
       </Section>
       <Section
         className="lg:col-span-3"

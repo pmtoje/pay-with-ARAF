@@ -177,7 +177,7 @@ export class ProvidersService {
       const latencyMs = Date.now() - started;
       this.prisma.integrationLog
         .create({
-          data: { provider, operation, environment, isSimulated: environment === 'SANDBOX', applicationId: ctx.applicationId, correlationId: ctx.correlationId, outcome, errorCode, latencyMs },
+          data: { provider, operation, environment, isSimulated: environment === 'SANDBOX' && !(provider === 'ARAF' && this.connectedAraf), applicationId: ctx.applicationId, correlationId: ctx.correlationId, outcome, errorCode, latencyMs },
         })
         .catch((err) => this.logger.warn(`integration log failed: ${(err as Error).message}`));
     }

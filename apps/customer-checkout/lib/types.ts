@@ -81,6 +81,8 @@ export interface View {
   fulfilment?: Array<{ status: string; at: string; tracking_reference: string | null; carrier: string | null }>;
   exception?: { message: string | null } | null;
   contact_window_hours?: { min: number; max: number } | null;
+  /** The Bank's question when it asked for more information. */
+  information_request?: { question: string | null; requested_at: string } | null;
   equity?: EquityView;
   annual_profit_rate_percent?: number;
 }

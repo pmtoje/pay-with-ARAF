@@ -186,6 +186,7 @@ export class AuthService {
       mfa_verified: p.mfaVerified,
       environment: this.config.PLATFORM_ENVIRONMENT,
       sandbox: this.config.isSandbox,
+      araf_connected: this.config.ARAF_MODE === 'connected',
     };
   }
 

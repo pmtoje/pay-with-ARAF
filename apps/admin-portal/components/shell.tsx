@@ -15,7 +15,7 @@ interface NavDef extends NavItem {
   perm?: string;
 }
 
-export function navFor(can: (p: string) => boolean, sandbox: boolean): NavDef[] {
+export function navFor(can: (p: string) => boolean, sandbox: boolean, arafConnected = false): NavDef[] {
   const all: NavDef[] = [
     { href: '/', label: 'Executive overview', icon: Icon.overview(), section: 'Overview', perm: 'report.read' },
     { href: '/approvals', label: 'Approvals inbox', icon: Icon.approvals(), section: 'Work queues' },
@@ -33,7 +33,8 @@ export function navFor(can: (p: string) => boolean, sandbox: boolean): NavDef[] 
     { href: '/integrations', label: 'Integrations', icon: Icon.integrations(), section: 'Platform', perm: 'integration.read' },
   ];
   if (sandbox) all.push({ href: '/sandbox', label: 'Sandbox tools', icon: Icon.sandbox(), section: 'Platform' });
-  return all.filter((n) => !n.perm || can(n.perm));
+  // Connected to the real ARAF: credit decisions are made in ARAF, so the simulator is not offered.
+  return all.filter((n) => (!n.perm || can(n.perm)) && !(arafConnected && n.href === '/araf-simulator'));
 }
 
 export function AdminShell({ children }: { children: ReactNode }) {
@@ -41,7 +42,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const { me, can } = useSession();
   const pending = useApi<Array<{ can_decide: boolean }>>('/api/admin/approvals?status=PENDING', { pollMs: 60_000 });
   const actionable = pending.data?.filter((a) => a.can_decide).length ?? 0;
-  const nav = navFor(can, me.sandbox).map((n) =>
+  const nav = navFor(can, me.sandbox, me.araf_connected).map((n) =>
     n.href === '/approvals' && actionable > 0
       ? { ...n, badge: <span className="rounded-sm bg-gold px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-white dark:text-[#0c0c0d]" aria-label={`${actionable} awaiting your decision`}>{actionable}</span> }
       : n,

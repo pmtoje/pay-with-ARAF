@@ -14,7 +14,7 @@ export function TrackingStep() {
   const { view, summary } = useCheckout();
   const s = view.state;
   let action: ReactNode = null;
-  if (s === 'ADDITIONAL_INFORMATION_REQUIRED') action = <InformationRequest />;
+  if (s === 'ADDITIONAL_INFORMATION_REQUIRED') action = <InformationRequest question={view.information_request?.question ?? null} />;
   else if (s === 'DOCUMENTATION_PENDING') action = <DocumentSigning />;
   else if (s === 'MANDATE_PENDING') action = <MandateSetup />;
   else if (s === 'VENDOR_PAYMENT_CONFIRMED') action = <SaleAgreement />;
@@ -270,7 +270,7 @@ function ActionBox({ title, children }: { title: string; children: ReactNode }) 
   );
 }
 
-function InformationRequest() {
+function InformationRequest({ question }: { question: string | null }) {
   const { api, base } = useCheckout();
   const { busy, error, run } = useAction();
   const [note, setNote] = useState('');
@@ -278,7 +278,13 @@ function InformationRequest() {
   const tooShort = note.trim().length < 3;
   return (
     <ActionBox title="Our team needs more information">
-      <p className="text-sm text-muted">Please answer the question you received from our team, or share any details that help us complete your review. Don’t include passwords, PINs or full card numbers.</p>
+      {question ? (
+        <div className="rounded-md border border-border bg-surface px-3 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">The Bank asks</p>
+          <p className="mt-1 text-sm text-fg">{question}</p>
+        </div>
+      ) : null}
+      <p className="text-sm text-muted">{question ? 'Reply below' : 'Please answer the question you received from our team, or share any details that help us complete your review'}. Don’t include passwords, PINs or full card numbers.</p>
       {sent && <Alert tone="success">Thank you — we’ve sent your information to our team.</Alert>}
       <Field label="Your response" hint="Up to 1,000 characters.">
         {({ id, describedBy }) => <Textarea id={id} aria-describedby={describedBy} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} />}
