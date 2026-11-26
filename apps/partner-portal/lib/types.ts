@@ -67,6 +67,7 @@ export interface ApplicationDetail {
   customer_contribution: number | null;
   equity?: { required: boolean; amount: number; status: string; payable: boolean; payment_reference?: string | null; confirmed_at?: string | null };
   financed_amount?: number | null;
+  araf_fee?: { rate_percent: number; amount: number | null; charged: string; settlement: string };
   vendor_payment: { reference: string; status: string; amount: number | null; confirmed_at: string | null; simulated: boolean } | null;
   release: { reference?: string; status?: string; authorized: boolean; authorized_at?: string | null };
   timeline: Array<{ status: string; at: string }>;

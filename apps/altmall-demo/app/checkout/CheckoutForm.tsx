@@ -13,7 +13,7 @@ import { placeOrder, type PaymentMethod } from '@/app/actions/checkout';
 import { arafEligibility } from '../cart/CartView';
 import { BNPL_LABEL } from '@/components/ArafEmbed';
 
-type Errors = Partial<Record<'name' | 'phone' | 'address' | 'city' | 'state' | 'method', string>>;
+type Errors = Partial<Record<'name' | 'phone' | 'address' | 'city' | 'state' | 'method' | 'dob' | 'bvn', string>>;
 
 function validate(v: { name: string; phone: string; address: string; city: string; state: string }, method: PaymentMethod | null): Errors {
   const e: Errors = {};
@@ -101,7 +101,12 @@ export function CheckoutForm({ defaults }: { defaults: { name: string; phone: st
     e.preventDefault();
     setSubmitted(true);
     setFailure(null);
-    const errs = validate(values, method);
+    const errs: Errors = validate(values, method);
+    // Buy Now Pay Later: AltMall collects the identity details and sends them to the Bank for its checks.
+    if (method === 'araf') {
+      if (!dob || dob > new Date().toISOString().slice(0, 10)) errs.dob = 'Enter your date of birth.';
+      if (!/^\d{11}$/.test(bvn)) errs.bvn = 'Enter the 11 digits of your BVN.';
+    }
     setErrors(errs);
     if (Object.keys(errs).length) {
       requestAnimationFrame(() => errorRef.current?.focus());
@@ -219,16 +224,16 @@ export function CheckoutForm({ defaults }: { defaults: { name: string; phone: st
           </MethodOption>
           {method === 'araf' && (
             <div className="rounded-lg border border-dashed border-border-strong bg-surface-2/40 p-4">
-              <p className="text-sm font-semibold text-fg">Speed up Buy Now Pay Later (optional)</p>
+              <p className="text-sm font-semibold text-fg">Details for Buy Now Pay Later</p>
               <p className="mt-1 text-xs leading-relaxed text-muted">
-                We’ll pass your name, phone, email and delivery address to The Alternative Bank so you don’t type them again. Add these too and the Bank won’t ask for them. They go straight to the Bank — AltMall doesn’t keep them. You’ll still confirm with a code sent to your BVN-linked phone.
+                AltMall sends these, with your name, phone, email and delivery address, securely to The Alternative Bank, which runs the eligibility checks. They go straight to the Bank — AltMall doesn’t keep your BVN or date of birth. You’ll confirm it’s you with a code sent to your BVN-linked phone.
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Field label="Date of birth">
-                  {({ id }) => <Input id={id} type="date" value={dob} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDob(e.target.value)} />}
+                <Field label="Date of birth" required error={errors.dob}>
+                  {({ id, invalid }) => <Input id={id} aria-invalid={invalid} type="date" value={dob} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDob(e.target.value)} />}
                 </Field>
-                <Field label="BVN" hint="11 digits">
-                  {({ id, describedBy }) => <Input id={id} aria-describedby={describedBy} inputMode="numeric" autoComplete="off" maxLength={11} value={bvn} onChange={(e) => setBvn(e.target.value.replace(/\D/g, '').slice(0, 11))} />}
+                <Field label="BVN" required hint="11 digits. Dial *565*0# from your registered line if you don’t know it." error={errors.bvn}>
+                  {({ id, describedBy, invalid }) => <Input id={id} aria-describedby={describedBy} aria-invalid={invalid} type="password" inputMode="numeric" autoComplete="off" maxLength={11} value={bvn} onChange={(e) => setBvn(e.target.value.replace(/\D/g, '').slice(0, 11))} className="font-mono tracking-widest" />}
                 </Field>
               </div>
             </div>

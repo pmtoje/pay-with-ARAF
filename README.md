@@ -79,7 +79,7 @@ The worker shares the API codebase (`apps/api/src/worker.ts`); see `DECISIONS.md
 
 ## Tests
 ```bash
-pnpm --filter @araf/business-rules test   # 110
+pnpm --filter @araf/business-rules test   # 114
 pnpm --filter @araf/security test         # 36
 pnpm --filter @araf/integrations test     #  7
 pnpm --filter @araf/api test              # 50 (end-to-end lifecycle + scenarios + security)

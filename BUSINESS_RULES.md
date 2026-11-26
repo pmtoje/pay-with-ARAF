@@ -114,6 +114,15 @@ months profit = ₦750,000 (25% of ₦3,000,000, not of ₦5,000,000); deferred 
   financed amount. Reported to ARAF as `EQUITY_CONFIRMED`.
 * Enabled by policy (`customerEquityEnabled`) **and** per partner (`partial_financing_enabled`).
 
+## ARAF merchant fee (`merchantFee`)
+* **2%** (per-partner configuration, maker-checker) of the **purchase amount applied for** — the full
+  price, whether or not the customer paid equity. ₦5,000,000 item → ₦100,000 fee.
+* Charged to the **merchant**, never the customer; the vendor is paid the full financed amount.
+* Accrues once per application when the vendor payment is **confirmed** (the transaction is
+  processed); reversed as a credit if that payment is reversed or the goods are refunded.
+* Invoiced **monthly** per partner (Settlement issues, Finance records the payment — the issuer
+  cannot record payment). Visible to the partner under Settlements → ARAF fees & invoices.
+
 ## Cart comparison (`compareEligibilityToCart`)
 * A: eligible ≥ cart → finance the cart (equity optional). B: equal → full financing.
 * C: eligible < cart → customer equity covers the shortfall (`EQUITY_REQUIRED`) when equity is

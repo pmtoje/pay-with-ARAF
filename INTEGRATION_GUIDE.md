@@ -19,6 +19,9 @@
    `POST /api/v1/checkout/sessions` with the cart snapshot (integer kobo, single approved vendor,
    approved `return_url` / `cancel_url` origins) and an `Idempotency-Key` derived from your order
    reference. Redirect the shopper to `checkout_url`.
+   **Fees:** ARAF charges you 2% (your configured rate) of the purchase amount on each transaction
+   processed, invoiced monthly — see Partner portal → Settlements → *ARAF fees & invoices*. Vendor
+   payments are made in full; the customer's price is unaffected.
 4. **Return.** The shopper returns to `return_url` or `cancel_url`. **A redirect is not proof of
    anything.** Show "confirming status" and query `GET /api/v1/orders/{ref}`.
 5. **Webhooks.** Verify `ARAF-Signature` over the raw body (constant-time, 300 s tolerance),

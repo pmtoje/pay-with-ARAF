@@ -192,7 +192,11 @@ export function IdentityStep() {
     <StepCard
       eyebrow="Step 1 · Verify identity"
       title="Let’s confirm it’s you"
-      description={`To finance your ${summary.partner.name} purchase, The Alternative Bank needs to verify your identity. It takes about a minute.`}
+      description={
+        summary.prefill?.bvn && summary.prefill?.date_of_birth
+          ? `${summary.partner.name} has securely sent us your details. Give your permissions below and confirm it’s you with the code we send to your BVN-linked phone.`
+          : `To finance your ${summary.partner.name} purchase, The Alternative Bank needs to verify your identity. It takes about a minute.`
+      }
     >
       <form onSubmit={submit} noValidate className="space-y-6">
         <fieldset className="space-y-3">

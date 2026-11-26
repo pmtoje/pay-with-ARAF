@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-11-26
+### Added
+- ARAF merchant fee (D-033): 2% of the purchase amount (equity included) per processed transaction,
+  per-partner rate, accrued on vendor-payment confirmation, credited on reversal/refund, monthly
+  invoices (Settlement issues, Finance records payment); admin *Fees & invoices* tab; partner
+  *ARAF fees & invoices*; `araf_fee` on merchant application views; migration
+  `20261126190000_merchant_fee` with sign/rate CHECKs; tests.
+### Changed
+- Merchant-collected identity (D-032): AltMall requires date of birth and BVN for Buy Now Pay Later
+  and sends them to the Bank (not stored by AltMall); the Bank checkout asks only for consent and
+  the one-time code.
+
 ## 0.3.3 — 2026-11-26
 ### Added
 - Merchant pre-fill (D-031): optional customer name, email, phone, address, date of birth and BVN on

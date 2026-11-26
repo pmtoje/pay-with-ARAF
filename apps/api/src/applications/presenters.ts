@@ -1,4 +1,4 @@
-import { EQUITY_PAYABLE_STATES, deriveCustomerStatus, deriveMerchantStatus, type ApplicationState } from '@araf/business-rules';
+import { EQUITY_PAYABLE_STATES, merchantFee, deriveCustomerStatus, deriveMerchantStatus, type ApplicationState } from '@araf/business-rules';
 import type { FinancingApplication, ReleaseAuthorization, VendorPaymentInstruction } from '@araf/database';
 
 export const n = (v: bigint | null | undefined): number | null => (v === null || v === undefined ? null : Number(v));
@@ -31,6 +31,8 @@ export function presentMerchantApplication(
     customer_contribution: n(app.contributionAmountKobo) ?? 0,
     equity: equityView(app),
     financed_amount: n(app.purchaseAmountKobo - app.contributionAmountKobo),
+    // ARAF's fee to the merchant: on the full purchase amount (equity included), invoiced monthly.
+    araf_fee: { rate_percent: app.merchantFeeBps / 100, amount: n(merchantFee(app.purchaseAmountKobo, app.merchantFeeBps)), charged: 'ON_VENDOR_PAYMENT_CONFIRMATION', settlement: 'INVOICED_MONTHLY' },
     vendor_payment: extra.payment
       ? {
           reference: extra.payment.reference,

@@ -18,6 +18,7 @@ import {
   isOfferAffordable,
   isWithinRatio,
   totalMarkupBps,
+  merchantFee,
   equityBounds,
   validateEquity,
   maxAffordableFinancing,
@@ -396,6 +397,18 @@ describe('customer equity (down payment to the merchant)', () => {
     expect(validateEquity(N(1), b, false)).toBe('EQUITY_DISABLED');
     expect(validateEquity(0n, b, false)).toBeNull();
   });
+});
+
+describe('ARAF merchant fee (2% of the amount applied for)', () => {
+  it('₦5,000,000 → ₦100,000', () => expect(merchantFee(N(5_000_000), 200)).toBe(N(100_000)));
+  it('equity does not change the fee: it is on the full purchase amount', () => {
+    const purchase = N(5_000_000);
+    const equity = N(2_000_000);
+    expect(merchantFee(purchase, 200)).toBe(N(100_000));
+    expect(merchantFee(purchase - equity, 200)).not.toBe(merchantFee(purchase, 200)); // never the financed amount
+  });
+  it('rounds half up to the kobo', () => expect(merchantFee(25n, 200)).toBe(1n)); // 0.5 kobo → 1
+  it('rejects invalid rates', () => expect(() => merchantFee(N(1), 10_001)).toThrow());
 });
 
 describe('business owners: 10% of turnover', () => {

@@ -58,6 +58,13 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     if (reasons.length) return { ok: false, title: 'This basket can’t be paid with ARAF', lines: reasons };
   }
 
+  if (input.method === 'araf') {
+    // The Bank receives the shopper's identity details from AltMall (server-to-server) and runs the checks.
+    const id = input.identity ?? {};
+    if (!id.date_of_birth || !/^\d{4}-\d{2}-\d{2}$/.test(id.date_of_birth) || !id.bvn || !/^\d{11}$/.test(id.bvn)) {
+      return { ok: false, title: 'Add your date of birth and BVN', lines: ['The Alternative Bank needs them to check your eligibility.'], fields: { ...(!id.date_of_birth ? { dob: 'Enter your date of birth.' } : {}), ...(!id.bvn || !/^\d{11}$/.test(id.bvn) ? { bvn: 'Enter the 11 digits of your BVN.' } : {}) } };
+    }
+  }
   const order = await createOrder(customer, lines, { ...delivery, phone: phone! }, input.method);
   revalidatePath('/orders');
   if (input.method !== 'araf') return { ok: true, reference: order.reference, redirect: `/orders/${order.reference}?placed=1`, external: false };

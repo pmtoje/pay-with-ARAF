@@ -338,6 +338,8 @@ model PartnerConfiguration {
   partialFinancingEnabled     Boolean  @default(false) // customer equity (down payment to the merchant) allowed
   /// Product pricing: profit rate per annum in basis points (2500 = 25% p.a.). Set per partner product, maker-checker approved.
   annualProfitRateBps         Int      @default(2500)
+  /// ARAF merchant fee on every processed transaction, bps of the purchase amount (200 = 2%). Invoiced separately.
+  merchantFeeBps              Int      @default(200)
   allowMultipleVendors        Boolean  @default(false)
   settlementArrangement       String   @default("DIRECT_TO_VENDOR")
   sandboxEnabled              Boolean  @default(true)
@@ -614,6 +616,8 @@ model FinancingApplication {
   contributionConfirmedAt   DateTime?
   /// Product profit rate p.a. (bps) snapshotted from the partner's active configuration at checkout.
   annualProfitRateBps       Int               @default(2500)
+  /// Merchant fee rate snapshotted at checkout (bps of the purchase amount).
+  merchantFeeBps            Int               @default(200)
   selectedAccountId         String?
   vendorId                  String
   creditPolicyVersionId     String
@@ -1602,4 +1606,47 @@ model SimRecord {
 
   @@unique([kind, key])
   @@map("sim_records")
+}
+
+// ---------------------------------------------------------------------------
+// ARAF merchant fee (2% of the purchase amount per processed transaction), invoiced monthly
+// ---------------------------------------------------------------------------
+
+model MerchantFee {
+  id             String      @id @default(uuid())
+  partnerId      String
+  environment    Environment
+  applicationId  String
+  kind           String      // FEE | REVERSAL
+  baseAmountKobo BigInt      // purchase amount applied for (equity included)
+  feeBps         Int
+  feeKobo        BigInt      // negative for a REVERSAL
+  reason         String?
+  invoiceId      String?
+  invoice        MerchantInvoice? @relation(fields: [invoiceId], references: [id])
+  accruedAt      DateTime    @default(now())
+
+  @@unique([applicationId, kind])
+  @@index([partnerId, environment, invoiceId])
+  @@map("merchant_fees")
+}
+
+model MerchantInvoice {
+  id             String      @id @default(uuid())
+  reference      String      @unique
+  partnerId      String
+  environment    Environment
+  period         String      // YYYY-MM
+  feeCount       Int
+  totalKobo      BigInt
+  status         String      @default("ISSUED") // ISSUED | PAID | VOID
+  issuedById     String
+  issuedAt       DateTime    @default(now())
+  paidAt         DateTime?
+  paymentReference String?
+  recordedPaidById String?
+  fees           MerchantFee[]
+
+  @@unique([partnerId, environment, period])
+  @@map("merchant_invoices")
 }

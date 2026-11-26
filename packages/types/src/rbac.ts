@@ -40,6 +40,7 @@ export const PERMISSIONS = {
   'payment.reconcile': 'Run reconciliation and resolve payment discrepancies',
   'refund.manage': 'Manage returns, cancellations and refunds',
   'refund.approve': 'Approve financial reversals (checker)',
+  'fee.manage': 'Issue ARAF merchant-fee invoices and record their payment (the issuer cannot record payment)',
   'release.suspend': 'Suspend goods release authorisations',
   'exception.manage': 'Work operational exception queues',
   // Platform
@@ -150,14 +151,14 @@ export const BANK_ROLES: RoleDefinition[] = [
     name: 'Settlement Officer',
     scope: 'STAFF',
     description: 'Initiates vendor payment instructions (maker) and runs reconciliation.',
-    permissions: ['application.read', 'payment.initiate', 'payment.reconcile', 'refund.manage'],
+    permissions: ['application.read', 'payment.initiate', 'payment.reconcile', 'refund.manage', 'fee.manage'],
   },
   {
     code: 'FINANCE_OFFICER',
     name: 'Finance Officer',
     scope: 'STAFF',
     description: 'Approves vendor payments and financial reversals (checker).',
-    permissions: ['application.read', 'payment.approve', 'refund.approve', 'payment.reconcile', 'report.read', 'report.export'],
+    permissions: ['application.read', 'payment.approve', 'refund.approve', 'payment.reconcile', 'report.read', 'report.export', 'fee.manage'],
   },
   {
     code: 'COMPLIANCE_OFFICER',

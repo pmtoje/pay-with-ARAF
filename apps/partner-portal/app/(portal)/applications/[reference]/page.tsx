@@ -125,6 +125,7 @@ function DetailInner() {
                   { label: 'Customer equity (you collect)', value: <span className="tabular-nums">{formatNaira(data.customer_contribution)}</span> },
                   { label: 'Equity status', value: data.equity?.required ? `${humanize(data.equity.status)}${data.equity.payment_reference ? ` · ${data.equity.payment_reference}` : ''}` : 'Not required' },
                   { label: 'Financed by the Bank', value: <span className="tabular-nums">{formatNaira(data.financed_amount ?? null)}</span> },
+                  { label: `ARAF fee (${data.araf_fee?.rate_percent ?? 2}%, invoiced monthly)`, value: <span className="tabular-nums">{formatNaira(data.araf_fee?.amount ?? null)}</span> },
                   { label: 'Currency', value: data.currency },
                   { label: 'Created', value: formatDateTime(data.created_at) },
                   { label: 'Last updated', value: formatDateTime(data.updated_at) },

@@ -156,7 +156,22 @@ describe('Pay with ARAF — end-to-end sandbox lifecycle', () => {
     expect(payment.status).toBe('CONFIRMED');
     expect(payment.confirmedByAuthoritativeSource).toBe(true);
     expect(payment.isSimulated).toBe(true);
-    expect(payment.amountKobo).toBe(45_000_000n);
+    expect(payment.amountKobo).toBe(45_000_000n); // the vendor is paid in full; the ARAF fee is invoiced separately
+    // ARAF merchant fee: 2% of the purchase amount, accrued once the transaction is processed.
+    const fee = await h.prisma.merchantFee.findUniqueOrThrow({ where: { applicationId_kind: { applicationId: app.id, kind: 'FEE' } } });
+    expect(fee).toMatchObject({ feeBps: 200, baseAmountKobo: 45_000_000n, feeKobo: 900_000n });
+    const merchantView = (await request(h.http).get(`/api/v1/applications/${reference}`).set('Authorization', `Bearer ${mall.apiKey}`)).body;
+    expect(merchantView.araf_fee).toMatchObject({ rate_percent: 2, amount: 900_000, settlement: 'INVOICED_MONTHLY' });
+    // Monthly invoice: Settlement issues it; the issuer cannot also record payment; Finance does.
+    const month = new Date().toISOString().slice(0, 7);
+    const inv = await settlement.post(`/api/admin/partners/${mall.id}/invoices`, { period: month });
+    expect(inv.status, JSON.stringify(inv.body)).toBe(201);
+    expect(inv.body).toMatchObject({ period: month, fee_count: 1, total: 900_000, status: 'ISSUED' });
+    expect((await settlement.post(`/api/admin/partners/${mall.id}/invoices`, { period: month })).body.error.code).toBe('CONFLICT');
+    expect((await settlement.post(`/api/admin/invoices/${inv.body.id}/paid`, { payment_reference: 'TRF-0001' })).body.error.code).toBe('MAKER_CHECKER_VIOLATION');
+    expect((await finance.post(`/api/admin/invoices/${inv.body.id}/paid`, { payment_reference: 'TRF-0001' })).body.status).toBe('PAID');
+    const partnerFees = (await mall.portal.get('/api/partner-portal/fees')).body;
+    expect(partnerFees.invoices[0]).toMatchObject({ reference: inv.body.reference, total: 900_000, status: 'PAID' });
   });
 
   it('payment confirmed but contractual conditions missing: release still blocked', async () => {

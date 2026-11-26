@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { CONFIG, loadConfig } from './config';
 import { GlobalExceptionFilter } from './common/errors';
 import { BigIntInterceptor } from './common/bigint.interceptor';
+import { FeesService } from './fees/fees.service';
 import { PrismaService } from './common/prisma.service';
 import { CryptoService } from './common/crypto.service';
 import { AuditService, IdempotencyService, OutboxService, RateLimitService, ReferenceService, StateService } from './common/core.services';
@@ -36,6 +37,7 @@ import { WorkerService } from './worker/worker.service';
 
 const SERVICES = [
   PrismaService,
+  FeesService,
   CryptoService,
   AuditService,
   OutboxService,

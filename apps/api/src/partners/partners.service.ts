@@ -48,6 +48,8 @@ export const configInputSchema = z
     /** Customer equity: the customer may pay part of the price to the merchant; only the remainder is financed. */
     partial_financing_enabled: z.boolean(),
     /** Product pricing: profit rate per annum, in percent with up to 2 decimals (25 = 25% p.a.). */
+    /** ARAF merchant fee: % of the purchase amount per processed transaction, invoiced to the partner. */
+    merchant_fee_percent: z.number().min(0).max(10).refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-9, 'At most 2 decimal places').default(2),
     annual_profit_rate_percent: z.number().min(0).max(100).refine((v) => Number.isInteger(Math.round(v * 100)) && Math.abs(v * 100 - Math.round(v * 100)) < 1e-9, 'At most 2 decimal places').default(25),
     allow_multiple_vendors: z.boolean(),
     settlement_arrangement: z.enum(['DIRECT_TO_VENDOR', 'TO_MARKETPLACE']),
@@ -250,7 +252,7 @@ export class PartnersService implements OnModuleInit {
     };
   }
 
-  presentConfig(c: { id: string; version: number; status: string; minTransactionKobo: bigint; maxTransactionKobo: bigint; permittedProducts: string[]; permittedTenors: number[]; eligibleCategories: string[]; applicationExpiryMinutes: number; orderReservationMinutes: number; partialFinancingEnabled: boolean; annualProfitRateBps: number; allowMultipleVendors: boolean; settlementArrangement: string; sandboxEnabled: boolean; productionEnabled: boolean; approvedAt: Date | null; createdAt: Date }) {
+  presentConfig(c: { id: string; version: number; status: string; minTransactionKobo: bigint; maxTransactionKobo: bigint; permittedProducts: string[]; permittedTenors: number[]; eligibleCategories: string[]; applicationExpiryMinutes: number; orderReservationMinutes: number; partialFinancingEnabled: boolean; annualProfitRateBps: number; merchantFeeBps: number; allowMultipleVendors: boolean; settlementArrangement: string; sandboxEnabled: boolean; productionEnabled: boolean; approvedAt: Date | null; createdAt: Date }) {
     return {
       id: c.id,
       version: c.version,
@@ -265,6 +267,7 @@ export class PartnersService implements OnModuleInit {
       partial_financing_enabled: c.partialFinancingEnabled,
       customer_equity_enabled: c.partialFinancingEnabled,
       annual_profit_rate_percent: c.annualProfitRateBps / 100,
+      merchant_fee_percent: c.merchantFeeBps / 100,
       allow_multiple_vendors: c.allowMultipleVendors,
       settlement_arrangement: c.settlementArrangement,
       sandbox_enabled: c.sandboxEnabled,
@@ -379,6 +382,7 @@ export class PartnersService implements OnModuleInit {
           orderReservationMinutes: input.order_reservation_minutes,
           partialFinancingEnabled: input.partial_financing_enabled,
           annualProfitRateBps: Math.round(input.annual_profit_rate_percent * 100),
+          merchantFeeBps: Math.round(input.merchant_fee_percent * 100),
           allowMultipleVendors: input.allow_multiple_vendors,
           settlementArrangement: input.settlement_arrangement,
           makerId: actor.id,
@@ -394,7 +398,7 @@ export class PartnersService implements OnModuleInit {
       await this.audit.record(actor, { action: 'partner.configuration_proposed', resourceType: 'PARTNER_CONFIGURATION', resourceId: cfg.id, partnerId, after: input }, tx);
       // Once a partner is live, every configuration change goes through its own maker-checker request.
       if (!['DRAFT', 'ADDITIONAL_INFORMATION_REQUIRED', 'SUBMITTED', 'UNDER_REVIEW'].includes(partner.status)) {
-        await this.approvals.create(tx, { type: 'PARTNER_CONFIG', resourceType: 'PARTNER_CONFIGURATION', resourceId: cfg.id, partnerId, payload: { version: cfg.version, annual_profit_rate_percent: input.annual_profit_rate_percent, customer_equity_enabled: input.partial_financing_enabled, permitted_tenors: cfg.permittedTenors }, summary: `Configuration v${cfg.version} for ${partner.tradingName} — ${input.annual_profit_rate_percent}% p.a., tenors up to ${Math.max(...cfg.permittedTenors)} months` }, actor);
+        await this.approvals.create(tx, { type: 'PARTNER_CONFIG', resourceType: 'PARTNER_CONFIGURATION', resourceId: cfg.id, partnerId, payload: { version: cfg.version, annual_profit_rate_percent: input.annual_profit_rate_percent, customer_equity_enabled: input.partial_financing_enabled, permitted_tenors: cfg.permittedTenors }, summary: `Configuration v${cfg.version} for ${partner.tradingName} — ${input.annual_profit_rate_percent}% p.a., tenors up to ${Math.max(...cfg.permittedTenors)} months, ARAF fee ${input.merchant_fee_percent}%` }, actor);
       }
       return cfg;
     });

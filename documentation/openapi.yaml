@@ -100,6 +100,14 @@ components:
         purchase_amount: { type: integer }
         customer_contribution: { type: integer, description: Customer equity in kobo (paid to the merchant; not financed). }
         financed_amount: { type: integer, description: purchase_amount − customer_contribution. The Bank pays the vendor this amount and charges profit only on it. }
+        araf_fee:
+          type: object
+          description: ARAF's merchant fee for this application, charged to you and invoiced monthly (never deducted from the vendor payment).
+          properties:
+            rate_percent: { type: number, example: 2 }
+            amount: { type: integer, description: kobo; rate × purchase_amount (equity included) }
+            charged: { const: ON_VENDOR_PAYMENT_CONFIRMATION }
+            settlement: { const: INVOICED_MONTHLY }
         equity:
           type: object
           properties:

@@ -1,4 +1,6 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
+import { FeesService } from '../fees/fees.service';
+import { CONFIG, type AppConfig } from '../config';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { AppError } from '../common/errors';
@@ -30,6 +32,8 @@ export class AdminController {
     private readonly audit: AuditService,
     private readonly webhooks: WebhooksService,
     private readonly arafReports: ArafReportingService,
+    private readonly fees: FeesService,
+    @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
   // ---- Dashboards & reports -----------------------------------------------------------
@@ -99,6 +103,37 @@ export class AdminController {
   @Staff('partner.create')
   updatePartner(@Param('id') id: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {
     return this.partners.update(id, body, req.actor);
+  }
+
+  @Get('partners/:id/fees')
+  @Staff('partner.read')
+  partnerFees(@Param('id') id: string) {
+    return this.fees.overview(id, this.config.PLATFORM_ENVIRONMENT);
+  }
+
+  @Get('fees')
+  @Staff('fee.manage')
+  feePortfolio() {
+    return this.fees.portfolio(this.config.PLATFORM_ENVIRONMENT);
+  }
+
+  @Get('fees/partners/:id')
+  @Staff('fee.manage')
+  feesForPartner(@Param('id') id: string) {
+    return this.fees.overview(id, this.config.PLATFORM_ENVIRONMENT);
+  }
+
+  @Post('partners/:id/invoices')
+  @Staff('fee.manage')
+  issueInvoice(@Param('id') id: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {
+    return this.fees.issueInvoice(id, this.config.PLATFORM_ENVIRONMENT, body, req.actor);
+  }
+
+  @Post('invoices/:id/paid')
+  @HttpCode(200)
+  @Staff('fee.manage')
+  invoicePaid(@Param('id') id: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {
+    return this.fees.markPaid(id, body, req.actor);
   }
 
   @Post('partners/:id/portal-settings')

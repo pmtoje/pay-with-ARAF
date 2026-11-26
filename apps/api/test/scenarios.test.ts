@@ -638,6 +638,12 @@ describe('Sandbox scenarios and security controls', () => {
     // Payment reversal suspends release eligibility and raises an exception.
     const rev = await ops.post(`/api/admin/sandbox/applications/${app.id}/reverse-payment`);
     expect(rev.status === 200 || rev.status === 403).toBe(true);
+    if (rev.status === 200) {
+      // The ARAF fee for a reversed transaction is credited back to the merchant.
+      const fees = await h.prisma.merchantFee.findMany({ where: { applicationId: app.id } });
+      const fee = fees.find((f) => f.kind === 'FEE')!;
+      expect(fees.find((f) => f.kind === 'REVERSAL')?.feeKobo).toBe(-fee.feeKobo);
+    }
   });
 
   it('23. webhook endpoint failure → retried with backoff, then delivered', async () => {

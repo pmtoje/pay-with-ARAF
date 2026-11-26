@@ -26,6 +26,8 @@ export interface PartnerConfig {
   customer_equity_enabled?: boolean;
   /** Product pricing: profit rate per annum (25 = 25% p.a.). */
   annual_profit_rate_percent?: number;
+  /** ARAF merchant fee (% of the purchase amount, invoiced to the partner). */
+  merchant_fee_percent?: number;
   allow_multiple_vendors: boolean;
   settlement_arrangement: string;
   sandbox_enabled: boolean;
@@ -190,6 +192,7 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
   const [multi, setMulti] = useState(base?.allow_multiple_vendors ?? false);
   const [equity, setEquity] = useState(base?.partial_financing_enabled ?? true);
   const [rate, setRate] = useState(String(base?.annual_profit_rate_percent ?? 25));
+  const [fee, setFee] = useState(String(base?.merchant_fee_percent ?? 2));
   const [settlement, setSettlement] = useState(base?.settlement_arrangement ?? 'DIRECT_TO_VENDOR');
   const [origins, setOrigins] = useState((domains ?? []).filter((d) => d.kind === 'RETURN_URL_ORIGIN').map((d) => d.value).join('\n'));
   const [busy, setBusy] = useState(false);
@@ -206,6 +209,8 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
   if (!tenors.length) local.permitted_tenors = 'Select at least one tenor.';
   const rateN = /^\d{1,3}(\.\d{1,2})?$/.test(rate.trim()) ? Number(rate.trim()) : NaN;
   if (!(rateN >= 0 && rateN <= 100)) local.annual_profit_rate_percent = 'Enter a rate between 0 and 100, with up to 2 decimals.';
+  const feeN = /^\d{1,2}(\.\d{1,2})?$/.test(fee.trim()) ? Number(fee.trim()) : NaN;
+  if (!(feeN >= 0 && feeN <= 10)) local.merchant_fee_percent = 'Enter a fee between 0 and 10%, with up to 2 decimals.';
   if (!cats.length) local.eligible_categories = 'Add at least one category.';
   const originList = origins.split(/[\s,]+/).map((o) => o.trim()).filter(Boolean);
   if (!originList.length) local.return_url_origins = 'Add at least one return URL origin.';
@@ -229,6 +234,7 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
         order_reservation_minutes: toInt(reservation) ?? 0,
         partial_financing_enabled: equity,
         annual_profit_rate_percent: rateN,
+        merchant_fee_percent: feeN,
         allow_multiple_vendors: multi,
         settlement_arrangement: settlement,
         return_url_origins: originList,
@@ -261,6 +267,9 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
         <div className="mt-3"><Checkbox checked readOnly disabled label="Murabaha asset financing" description="The only permitted product in this build." /></div>
         <Field className="mt-3 max-w-xs" label="Profit rate (% per annum)" required error={show('annual_profit_rate_percent')} hint={Number.isFinite(rateN) ? `12 months = ${rateN}% total markup; 24 months = ${Math.round(rateN * 200) / 100}%. Applied to the financed amount only.` : undefined}>
           {(ids) => <Input id={ids.id} inputMode="decimal" aria-describedby={ids.describedBy} aria-invalid={ids.invalid} value={rate} onChange={(e) => setRate(e.target.value)} />}
+        </Field>
+        <Field className="mt-3 max-w-xs" label="ARAF merchant fee (% per transaction)" required error={show('merchant_fee_percent')} hint={Number.isFinite(feeN) ? `Charged to the partner on the full purchase amount (equity included), invoiced monthly. ₦5,000,000 → ₦${(50_000 * feeN).toLocaleString('en-NG')}.` : undefined}>
+          {(ids) => <Input id={ids.id} inputMode="decimal" aria-describedby={ids.describedBy} aria-invalid={ids.invalid} value={fee} onChange={(e) => setFee(e.target.value)} />}
         </Field>
         <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Permitted tenors">
           {POLICY_TENORS.map((t) => {
@@ -335,6 +344,7 @@ export function ConfigSummary({ c }: { c: PartnerConfig }) {
       {row('Settlement', c.settlement_arrangement === 'DIRECT_TO_VENDOR' ? 'Direct to vendor' : 'To marketplace')}
       {row('Multiple vendors', c.allow_multiple_vendors ? 'Allowed' : 'Not allowed')}
       {row('Profit rate', c.annual_profit_rate_percent !== undefined ? `${c.annual_profit_rate_percent}% per annum` : '—')}
+      {row('ARAF merchant fee', c.merchant_fee_percent !== undefined ? `${c.merchant_fee_percent}% of the purchase amount, invoiced monthly` : '—')}
       {row('Customer equity', c.partial_financing_enabled ? 'Enabled — financed = price − equity' : 'Disabled')}
       {row('Environments', <span className="inline-flex gap-1"><Badge tone={c.sandbox_enabled ? 'success' : 'neutral'}>Sandbox {c.sandbox_enabled ? 'on' : 'off'}</Badge><Badge tone={c.production_enabled ? 'success' : 'neutral'}>Production {c.production_enabled ? 'on' : 'off'}</Badge></span>)}
     </dl>

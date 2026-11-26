@@ -24,6 +24,7 @@ export function navFor(can: (p: string) => boolean, sandbox: boolean): NavDef[] 
     { href: '/araf-simulator', label: 'ARAF simulator', icon: Icon.araf(), section: 'Work queues', perm: 'application.read' },
     { href: '/operations', label: 'Operations', icon: Icon.operations(), section: 'Work queues', perm: 'application.read' },
     { href: '/reconciliation', label: 'Reconciliation', icon: Icon.reconcile(), section: 'Work queues', perm: 'payment.reconcile' },
+    { href: '/fees', label: 'Fees & invoices', icon: Icon.reconcile(), section: 'Work queues', perm: 'fee.manage' },
     { href: '/partners', label: 'Partners', icon: Icon.partners(), section: 'Portfolio', perm: 'partner.read' },
     { href: '/policy', label: 'Credit policy', icon: Icon.policy(), section: 'Portfolio', perm: 'policy.read' },
     { href: '/reports', label: 'Reports', icon: Icon.reports(), section: 'Insight', perm: 'report.read' },

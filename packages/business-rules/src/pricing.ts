@@ -119,6 +119,17 @@ export function priceDeferredSale(financingAmount: Kobo, tenorMonths: number, po
   };
 }
 
+/**
+ * ARAF merchant fee: a percentage of the purchase amount applied for (the full price, whether or
+ * not the customer paid equity), charged to the MERCHANT and invoiced separately. It never changes
+ * the customer's price or the amount the Bank pays the vendor.
+ */
+export function merchantFee(purchaseAmount: Kobo, feeBps: number): Kobo {
+  if (purchaseAmount < 0n) throw new RangeError('Purchase amount cannot be negative');
+  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 10_000) throw new RangeError('Invalid fee rate');
+  return mulRoundHalfUp(purchaseAmount, rational(feeBps, 10_000));
+}
+
 /** Add calendar months to a date (UTC), clamping to the end of shorter months. */
 export function addMonths(date: Date, months: number): Date {
   const y = date.getUTCFullYear();

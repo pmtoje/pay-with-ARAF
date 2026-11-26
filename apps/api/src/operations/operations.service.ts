@@ -26,6 +26,7 @@ import { JourneyService } from '../customer/journey.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { renderSimplePdf } from '../common/pdf';
 import { ArafReportingService, WEBHOOK_TO_ARAF_REPORT } from '../araf/araf-reporting.service';
+import { FeesService } from '../fees/fees.service';
 import type { AuthedRequest } from '../auth/auth.guard';
 
 const LIVE_PAYMENT_STATES: PaymentStatus[] = ['PENDING_APPROVAL', 'INITIATED', 'PROCESSING', 'CONFIRMED', 'UNKNOWN', 'RECONCILIATION_REQUIRED'];
@@ -53,6 +54,7 @@ export class OperationsService implements OnModuleInit {
     @Inject(forwardRef(() => JourneyService)) private readonly journey: JourneyService,
     private readonly notifications: NotificationsService,
     private readonly arafReports: ArafReportingService,
+    private readonly fees: FeesService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -475,6 +477,9 @@ export class OperationsService implements OnModuleInit {
 
   private async setPaymentStatus(tx: Tx, ins: VendorPaymentInstruction, to: PaymentStatus, source: string, actor: Actor, data: Partial<VendorPaymentInstruction>, detail?: string) {
     if (ins.status !== to) await this.state.recordTransition(tx, 'PAYMENT', ins.id, ins.status, to, actor, ins.applicationId, detail);
+    // ARAF merchant fee: accrues when the transaction is processed, reverses if the payment is reversed.
+    if (to === 'CONFIRMED' && ins.status !== 'CONFIRMED') await this.fees.accrue(tx, await tx.financingApplication.findUniqueOrThrow({ where: { id: ins.applicationId } }));
+    if (to === 'REVERSED') await this.fees.reverse(tx, ins.applicationId, 'VENDOR_PAYMENT_REVERSED');
     await tx.vendorPaymentInstruction.update({ where: { id: ins.id }, data: { ...data, status: to } as never });
     await tx.vendorPaymentEvent.create({ data: { instructionId: ins.id, status: to, source, providerReference: data.providerReference ?? ins.providerReference, amountKobo: ins.amountKobo, detail } });
     ins.status = to;
@@ -905,6 +910,7 @@ export class OperationsService implements OnModuleInit {
           await tx.merchantOrder.update({ where: { id: locked.orderId }, data: { status: 'RETURNED' } });
         }
         await this.ctx.resolveExceptions(tx, app.id, ['CANCELLATION_AFTER_PAYMENT', 'RETURN_REQUESTED'], `Vendor refund ${r.reference} reconciled`, SYSTEM_ACTOR);
+        await this.fees.reverse(tx, app.id, r.cancellationId ? 'CANCELLED_AFTER_PAYMENT' : 'GOODS_RETURNED');
         await this.emit(tx, locked, 'refund.completed', { refund_reference: r.reference, amount: Number(res.amount) });
       });
     }

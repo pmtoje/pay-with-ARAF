@@ -12,6 +12,7 @@ import { ActionDialog, ErrorAlert, Guard, Mono, Section } from '@/components/com
 import { ConfigForm, ConfigSummary, PartnerDetailsForm, VendorManager, type PartnerDetail } from '@/components/partner-forms';
 import { Icon } from '@/components/icons';
 import { PartnerPortalSettings } from '@/components/partner-portal-settings';
+import { PartnerFees } from '@/components/partner-fees';
 
 export default function PartnerPage() {
   return <Guard perm="partner.read"><Partner /></Guard>;
@@ -79,6 +80,7 @@ function Partner() {
           { id: 'vendors', label: 'Vendors', count: p.vendors.length },
           { id: 'integration', label: 'Integration' },
           { id: 'portal', label: 'Partner portal' },
+          { id: 'fees', label: 'Fees & invoices' },
           { id: 'users', label: 'Users', count: p.users.length },
           { id: 'approvals', label: 'Approvals', count: p.approvals.length },
         ]}
@@ -176,6 +178,8 @@ function Partner() {
         )}
 
         {tab === 'vendors' && <Card className="p-5"><VendorManager partner={p} onChanged={state.reload} /></Card>}
+
+        {tab === 'fees' && <PartnerFees partnerId={p.id} />}
 
         {tab === 'portal' && p.portal && <PartnerPortalSettings partnerId={p.id} partnerName={p.trading_name} view={p.portal} onChanged={state.reload} />}
 

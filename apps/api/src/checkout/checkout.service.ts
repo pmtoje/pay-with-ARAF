@@ -171,6 +171,7 @@ export class CheckoutService {
           creditPolicyVersionId: policyVersion.id,
           // Product pricing is fixed for the life of the application.
           annualProfitRateBps: config.annualProfitRateBps,
+          merchantFeeBps: config.merchantFeeBps,
           revisesApplicationId: revises?.applicationId,
           expiresAt,
         },

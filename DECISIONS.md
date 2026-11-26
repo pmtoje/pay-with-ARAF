@@ -229,6 +229,24 @@ account opening. Explicit consent and the OTP to the BVN-linked phone are always
 cannot be pre-filled. **Open:** Compliance to confirm which partners may send BVN (e.g. KYC-regulated
 partners only) and whether that needs a partner-level permission.
 
+### D-032 — The merchant collects the customer's details; the Bank runs the checks
+Requested 2026-11-26: "Let AltMall do it and send it to us so we can run a check on it." For Buy Now
+Pay Later the merchant collects name, contact details, address, date of birth and BVN and sends them
+server-to-server when creating the checkout session (AltMall makes date of birth and BVN required and
+does not store them). The Bank's checkout then asks only for what is still missing. The Bank still
+obtains, in its own checkout: the customer's **explicit consents** (the Bank is the data controller
+for the credit check and statement analysis) and the **one-time code** to the BVN-linked phone
+(proof the customer is the BVN holder). If merchant details do not match, the customer may correct
+them. **Open:** Compliance to confirm partner eligibility to collect BVN and whether consent can be
+captured by the merchant on the Bank's behalf (would need versioned Bank wording + evidence).
+
+### D-033 — ARAF merchant fee: 2% of the amount applied for, invoiced separately
+Requested 2026-11-26. ARAF charges the merchant 2% of the purchase amount (equity included) on every
+transaction processed (vendor payment confirmed). Chosen settlement: **invoiced monthly**, not
+deducted from the vendor payment and not charged to the customer. Rate is per partner configuration
+(default 2%, maker-checker). Reversed payments and refunds generate credits. **Open:** VAT treatment,
+payment terms and collection process (Finance), contractual basis in partner agreements (Legal).
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable

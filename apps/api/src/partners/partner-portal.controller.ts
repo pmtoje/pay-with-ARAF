@@ -1,3 +1,4 @@
+import { FeesService } from '../fees/fees.service';
 import { effectivePortalSettings } from '@araf/types';
 import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
@@ -34,6 +35,7 @@ export class PartnerPortalController {
     private readonly webhooks: WebhooksService,
     private readonly audit: AuditService,
     private readonly providers: ProvidersService,
+    private readonly feesService: FeesService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -182,6 +184,12 @@ export class PartnerPortalController {
   @PartnerUser('p.settlement.read')
   settlements(@Query() q: Record<string, string>, @Ctx() req: AuthedRequest) {
     return this.checkout.listSettlements(this.pid(req), this.config.PLATFORM_ENVIRONMENT, { status: q.status, limit: 200 });
+  }
+
+  @Get('fees')
+  @PartnerUser('p.settlement.read')
+  fees(@Ctx() req: AuthedRequest) {
+    return this.feesService.overview(this.pid(req), this.config.PLATFORM_ENVIRONMENT);
   }
 
   // ---- Integration --------------------------------------------------------------------
