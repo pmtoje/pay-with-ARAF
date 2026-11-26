@@ -56,8 +56,11 @@
   the build follows the specification text and records every interpretation as PROPOSED.
 * Portfolio reporting (outstanding balances, repayments, past-due) is intentionally unavailable —
   requires core banking integration.
-* Partial financing (customer contribution) is implemented in the rules and release gate but
-  disabled; contribution collection rails are not built.
+* Customer equity is enabled in the sandbox (D-023): the merchant collects it and confirms it via
+  the API; the Bank does not collect equity itself. Refund of confirmed equity on later cancellation
+  is a merchant obligation still to be agreed.
+* Embedded checkout requires HTTPS in production (partitioned cookies); live provider pages that
+  refuse framing (Remita, Mono) need pop-up adapters (D-026).
 * Returns after completion record refunds and reverse the (simulated) booking but do not compute
   residual financing balances (core banking responsibility).
 * WhatsApp notifications not implemented (channel not approved/integrated).
@@ -66,6 +69,6 @@
 
 ## Business decisions requiring approval
 D-004 brand · D-005 score bands · D-007 obligations source · D-008 exposure definition ·
-D-010 partial financing · D-011 contractual sequence · offer and
+D-010 / D-023 customer equity · D-024 per-annum product rates · D-025 business-owner 10% of turnover · D-011 contractual sequence · offer and
 assessment validity windows · minimum financing amount (₦20,000) · age limits (18–65) ·
 business-owner affordability model · thin-file policy · notification templates and consent texts.
