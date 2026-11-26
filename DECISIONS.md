@@ -198,6 +198,14 @@ Customer writes are idempotent (`Idempotency-Key`, Redis replay for 24 h, scoped
 session) and retried with the same key; on uncertainty the UI re-reads server state. See
 `documentation/FAILURE_HANDLING.md`.
 
+### D-029 — Public domain: araf.ng
+Requested 2026-11-26. `www.araf.ng` is the customer-facing home: public homepage, hosted checkout
+and the embed SDK (`https://www.araf.ng/v1/araf.js`), so the address customers verify is the brand
+domain. Partner API on `api.araf.ng`, portals on `partners.` / `developers.`, admin on an internal-only
+`admin.araf.ng`; sandbox under `*.sandbox.araf.ng`. Host-only cookies per sub-domain (no shared
+cookie domain). See DEPLOYMENT.md → Domains. **Open:** domain registration under the Bank's name and
+the hosting platform choice (Technology).
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable

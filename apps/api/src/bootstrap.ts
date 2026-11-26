@@ -9,7 +9,9 @@ import { CONFIG, type AppConfig } from './config';
 export async function createApp(): Promise<NestExpressApplication> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, bufferLogs: false, logger: ['error', 'warn', 'log'] });
   const config = app.get<AppConfig>(CONFIG);
-  app.set('trust proxy', config.APP_ENV === 'local' || config.APP_ENV === 'test' ? 'loopback' : 1);
+  // Client IPs drive rate limits and audit records. Behind araf.ng the edge proxy OVERWRITES
+  // X-Forwarded-For with the real client address, so trusting a fixed number of hops cannot be spoofed.
+  app.set('trust proxy', config.APP_ENV === 'local' || config.APP_ENV === 'test' ? 'loopback' : config.TRUST_PROXY_HOPS);
   app.disable('x-powered-by');
   app.use(
     helmet({

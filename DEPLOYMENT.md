@@ -18,6 +18,31 @@ stay `false` until every gate in `PRODUCTION_READINESS.md` is signed off. Sandbo
 scenario selector and simulator endpoints are unreachable unless the deployment is SANDBOX and not
 production.
 
+## Domains — araf.ng
+
+| Host | Serves | Exposure |
+| --- | --- | --- |
+| `araf.ng` | 301 → `https://www.araf.ng` | Public |
+| `www.araf.ng` | Public homepage, hosted checkout `/c/{session}`, embed SDK `/v1/araf.js` (customer-checkout app) | Public, behind WAF/DDoS/CDN |
+| `api.araf.ng` | Partner API `/api/v1`, provider callbacks `/api/callbacks`, health | Public, server-to-server |
+| `partners.araf.ng` | Partner portal | Public (MFA) |
+| `developers.araf.ng` | Developer documentation (both environments) | Public |
+| `admin.araf.ng` | Bank admin portal | **Internal DNS / VPN only** |
+| `sandbox.araf.ng`, `api.sandbox.araf.ng`, `partners.sandbox.araf.ng`, `admin.sandbox.araf.ng` | Sandbox equivalents (synthetic data, simulators) | As above |
+| `demo.sandbox.araf.ng` | AltMall demo store (sandbox only; real merchants host their own sites) | Public |
+
+Ready-made settings: `infrastructure/env/araf.ng.production.env.example`,
+`infrastructure/env/araf.ng.sandbox.env.example`; reverse proxy: `infrastructure/nginx/araf.ng.conf`
+(HTTPS only, HSTS, apex → www, `/api/admin`, `/api/sandbox` and `/metrics` blocked on the public API
+host, admin restricted to the Bank network). The proxy **overwrites** `X-Forwarded-For` and the API
+trusts `TRUST_PROXY_HOPS=2`, so rate limits and audit logs see each customer's real IP.
+`NEXT_PUBLIC_*` values are inlined when the web images are built — build one image set per environment.
+
+Before go-live: register `araf.ng` (and look-alikes such as `araf.com.ng`) through a NiRA-accredited
+registrar under the Bank's name; TLS certificates for `araf.ng` and `*.araf.ng`; DNSSEC; CAA records;
+SPF, DKIM and DMARC (`p=reject`) for any mail sent from `araf.ng`; link to `www.araf.ng` from the
+Bank's main website so customers can verify it is genuine.
+
 ## Local development (no Docker)
 
 Prerequisites: Node 22, pnpm 10, PostgreSQL 16, Redis 7.

@@ -1,5 +1,5 @@
+// Server-safe (no client-only imports): usable from server and client components.
 import type { ReactNode } from 'react';
-import { cn } from './primitives';
 
 /** The standard merchant call to action rendered by /v1/araf.js. */
 export const BNPL_BUTTON_LABEL = 'Buy Now Pay Later with AltBank';
@@ -7,7 +7,7 @@ export const BNPL_BUTTON_LABEL = 'Buy Now Pay Later with AltBank';
 /** Static preview of the SDK button (portals cannot load the merchant SDK). */
 export function BnplButtonPreview({ label = BNPL_BUTTON_LABEL, className }: { label?: string; className?: string }) {
   return (
-    <span role="img" aria-label={`Button preview: ${label}`} className={cn('inline-flex min-h-[48px] w-full max-w-sm items-center justify-center gap-2.5 rounded-[10px] bg-[#0c0c0d] px-5 text-[15px] font-semibold text-white', className)}>
+    <span role="img" aria-label={`Button preview: ${label}`} className={`inline-flex min-h-[48px] w-full max-w-sm items-center justify-center gap-2.5 rounded-[10px] bg-[#0c0c0d] px-5 text-[15px] font-semibold text-white ${className ?? ''}`}>
       <span aria-hidden="true" className="grid h-[22px] w-[22px] place-items-center rounded-md bg-[#b08a2e] text-[13px] font-extrabold text-[#0c0c0d]">
         A
       </span>

@@ -4,6 +4,8 @@ const appEnvs = ['local', 'test', 'sandbox', 'uat', 'staging', 'production'] as 
 
 const schema = z.object({
   APP_ENV: z.enum(appEnvs),
+  /** Reverse-proxy hops in front of the API (araf.ng: edge proxy + web app = 2). Proxies must overwrite X-Forwarded-For. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
   PLATFORM_ENVIRONMENT: z.enum(['SANDBOX', 'PRODUCTION']),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),

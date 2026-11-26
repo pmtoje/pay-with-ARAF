@@ -72,7 +72,7 @@ The same flow is automated in `apps/api/test/e2e-journey.test.ts`.
 apps/        api (NestJS API + worker) · customer-checkout · partner-portal · admin-portal · developer-portal · altmall-demo
 packages/    business-rules · security · database · integrations · types · ui · design-tokens
 documentation/ FRONTEND_GUIDE · UAT_PACK · SECURITY_ASSESSMENT · FAILURE_HANDLING · openapi.yaml
-infrastructure/ docker
+infrastructure/ docker · env (araf.ng templates) · nginx (araf.ng)
 scripts/     generate-env · demo-bootstrap · totp · scan-secrets
 ```
 The worker shares the API codebase (`apps/api/src/worker.ts`); see `DECISIONS.md` D-001.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 — 2026-11-26
+### Added
+- araf.ng domain plan (D-029): production and sandbox environment templates, nginx reverse-proxy
+  config, `TRUST_PROXY_HOPS` for real client IPs behind the proxy, and a public homepage for
+  www.araf.ng ("Buy Now Pay Later with AltBank").
+
 ## 0.3.0 — 2026-11-26
 ### Added
 - Embedded checkout (D-026): `/v1/araf.js` SDK (`ArafCheckout.open`, `ArafCheckout.button`), per-session
