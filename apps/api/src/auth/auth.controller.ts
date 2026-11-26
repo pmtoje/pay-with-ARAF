@@ -1,8 +1,9 @@
 import { effectivePortalSettings } from '@araf/types';
-import { Body, Controller, Get, HttpCode, Inject, Injectable, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Injectable, Param, Post, Query, Res } from '@nestjs/common';
+import { signArafRequest } from '@araf/integrations';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { generateTotpSecret, hashPassword, passwordPolicyErrors, randomToken, totpUri, verifyPassword, verifyTotp } from '@araf/security';
+import { generateTotpSecret, hashPassword, passwordPolicyErrors, randomToken, safeEqual, totpUri, verifyPassword, verifyTotp } from '@araf/security';
 import { CONFIG, type AppConfig } from '../config';
 import { AppError, fail } from '../common/errors';
 import { CryptoService } from '../common/crypto.service';
@@ -63,6 +64,10 @@ export class AuthService {
     const expectedType = portal === 'ADMIN' ? 'STAFF' : 'PARTNER';
     // Constant work whether or not the user exists (mitigates account enumeration).
     const ok = user?.passwordHash ? await verifyPassword(password, user.passwordHash) : await verifyPassword(password, 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=');
+    if (portal === 'ADMIN' && !this.config.staffEmailDomains.some((d) => normalized.endsWith(`@${d}`))) {
+      await this.audit.record({ ...req.actor, label: normalized }, { action: 'auth.login', resourceType: 'USER', outcome: 'FAILURE', reason: 'STAFF_DOMAIN' });
+      throw new AppError('INVALID_CREDENTIALS');
+    }
     if (!user || user.type !== expectedType) {
       await this.audit.record({ ...req.actor, label: normalized }, { action: 'auth.login', resourceType: 'USER', outcome: 'FAILURE', reason: 'UNKNOWN_USER_OR_PORTAL' });
       throw new AppError('INVALID_CREDENTIALS');
@@ -103,6 +108,64 @@ export class AuthService {
     await this.prisma.user.update({ where: { id: ctx.userId }, data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() } });
     await this.audit.record(req.actor, { action: 'auth.login', resourceType: 'USER', resourceId: ctx.userId });
     return { authenticated: true, csrf_token: csrf };
+  }
+
+  // ---- Sign in with ARAF (Bank staff, @altbank.ng) ------------------------------------------
+  //
+  // ARAF (the AltBank Retail Asset Factory) is the identity provider: staff sign in there with
+  // their @altbank.ng email and one-time code; ARAF returns a single-use code that this API
+  // exchanges server-to-server (signed). Roles and permissions stay in Pay with ARAF.
+
+  ssoConfig() {
+    return { enabled: this.config.ARAF_SSO_ENABLED, provider: 'ARAF', email_domains: this.config.staffEmailDomains };
+  }
+
+  private ssoRedirectUri() {
+    return `${this.config.ADMIN_PORTAL_URL.replace(/\/$/, '')}/api/auth/admin/sso/callback`;
+  }
+
+  ssoStart(res: Response) {
+    if (!this.config.ARAF_SSO_ENABLED || !this.config.ARAF_BASE_URL) throw new AppError('NOT_FOUND');
+    const state = randomToken('', 32);
+    res.cookie('araf_sso_state', this.crypto.tokenHash(state), { httpOnly: true, secure: this.config.COOKIE_SECURE, sameSite: 'lax', path: '/api/auth/admin/sso', maxAge: 10 * 60_000 });
+    const url = new URL('/sso/pay-with-araf', this.config.ARAF_BASE_URL);
+    url.searchParams.set('redirect_uri', this.ssoRedirectUri());
+    url.searchParams.set('state', state);
+    res.redirect(302, url.toString());
+  }
+
+  async ssoCallback(query: Record<string, string | undefined>, req: AuthedRequest, res: Response) {
+    const fail = (code: string) => res.redirect(302, `${this.config.ADMIN_PORTAL_URL.replace(/\/$/, '')}/login?sso_error=${code}`);
+    res.clearCookie('araf_sso_state', { path: '/api/auth/admin/sso' });
+    if (!this.config.ARAF_SSO_ENABLED || !this.config.ARAF_BASE_URL || !this.config.ARAF_INTEGRATION_SECRET) return fail('DISABLED');
+    const stateCookie = req.cookies?.araf_sso_state;
+    const { code, state } = query;
+    if (!code || !state || typeof stateCookie !== 'string' || !safeEqual(stateCookie, this.crypto.tokenHash(state))) return fail('STATE');
+    await this.rateLimit.hit(`sso:ip:${req.ip}`, 30, 300);
+    let identity: { email?: string; name?: string; auth_time?: number; amr?: string[] };
+    try {
+      const path = '/api/sso/pay-with-araf/token';
+      const body = JSON.stringify({ code, redirect_uri: this.ssoRedirectUri() });
+      const { timestamp, signature } = signArafRequest(this.config.ARAF_INTEGRATION_SECRET, 'POST', path, body);
+      const r = await fetch(new URL(path, this.config.ARAF_BASE_URL), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-PWA-Timestamp': timestamp, 'X-PWA-Signature': signature }, body, signal: AbortSignal.timeout(10_000) });
+      if (!r.ok) return fail('EXCHANGE');
+      identity = (await r.json()) as typeof identity;
+    } catch {
+      return fail('UNAVAILABLE');
+    }
+    const email = (identity.email ?? '').toLowerCase();
+    const domainOk = this.config.staffEmailDomains.some((d) => email.endsWith(`@${d}`));
+    const fresh = typeof identity.auth_time === 'number' && Date.now() / 1000 - identity.auth_time < 12 * 3600;
+    const user = domainOk ? await this.prisma.user.findUnique({ where: { email } }) : null;
+    if (!domainOk || !fresh || !user || user.type !== 'STAFF' || user.status !== 'ACTIVE') {
+      await this.audit.record({ ...req.actor, label: email || 'unknown' }, { action: 'auth.login', resourceType: 'USER', outcome: 'FAILURE', reason: !domainOk ? 'SSO_DOMAIN' : !fresh ? 'SSO_STALE' : 'SSO_NOT_PROVISIONED' });
+      return fail(!domainOk ? 'DOMAIN' : !user ? 'NOT_PROVISIONED' : 'DENIED');
+    }
+    // ARAF's email one-time code is the second factor for this sign-in.
+    await this.issueSession(res, 'ADMIN', user.id, true, req);
+    await this.prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() } });
+    await this.audit.record({ ...req.actor, id: user.id, label: user.email }, { action: 'auth.login', resourceType: 'USER', resourceId: user.id, after: { method: 'ARAF_SSO', amr: identity.amr ?? [] } });
+    res.redirect(302, `${this.config.ADMIN_PORTAL_URL.replace(/\/$/, '')}/`);
   }
 
   async logout(portal: PortalName, req: AuthedRequest, res: Response) {
@@ -208,6 +271,24 @@ const portalParam = (p: string): PortalName => {
 @Controller('api/auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
+
+  @Get('admin/sso/config')
+  @Public()
+  ssoConfig() {
+    return this.auth.ssoConfig();
+  }
+
+  @Get('admin/sso/start')
+  @Public()
+  ssoStart(@Res() res: Response) {
+    return this.auth.ssoStart(res);
+  }
+
+  @Get('admin/sso/callback')
+  @Public()
+  ssoCallback(@Query() q: Record<string, string | undefined>, @Ctx() req: AuthedRequest, @Res() res: Response) {
+    return this.auth.ssoCallback(q, req, res);
+  }
 
   @Post(':portal/login')
   @HttpCode(200)

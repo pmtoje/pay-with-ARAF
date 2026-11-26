@@ -247,6 +247,24 @@ deducted from the vendor payment and not charged to the customer. Rate is per pa
 (default 2%, maker-checker). Reversed payments and refunds generate credits. **Open:** VAT treatment,
 payment terms and collection process (Finance), contractual basis in partner agreements (Legal).
 
+### D-034 — Connect to the real ARAF; the repositories stay separate
+Requested 2026-11-26: "Use the repository from the ARAF Check out on Paul's git hub"; chosen: **only
+connect, keep repos apart**. ARAF (the AltBank Retail Asset Factory, @altbank.ng sign-in) stays its
+own application and database. The two are joined by a signed HTTP contract (v1, HMAC-SHA256 over
+`timestamp.METHOD.path.body`, 300-second window, one shared secret from the secrets manager):
+* `ARAF_MODE=connected` replaces the built-in simulator. Applications are submitted to ARAF's
+  integration API (idempotent, looked up by key after a timeout). Credit staff decide them in ARAF
+  (credit officers evaluate; a Credit Lead or the Unit Head approves; the recommender cannot
+  approve). Decisions come back as signed callbacks, delivered in order. Execution steps and the
+  customer's reply to an information request are reported to ARAF.
+* `ARAF_SSO_ENABLED=true` lets Bank staff sign in to the admin portal with their ARAF account. ARAF
+  only vouches for who the person is (its email OTP is the second factor). Roles and permissions
+  stay in Pay with ARAF, and the person must already hold an active staff account here (no
+  automatic provisioning). Staff emails are limited to `STAFF_EMAIL_DOMAINS` (altbank.ng in
+  production).
+**Open:** ARAF's production host and which branch deploys it; whether password + TOTP sign-in
+should be switched off for Bank staff once single sign-on is live; secret rotation procedure.
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable

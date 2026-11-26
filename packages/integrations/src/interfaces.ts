@@ -187,6 +187,7 @@ export interface StatementAnalysisProvider {
  * and may arrive more than once; `sequence` lets ARAF ignore out-of-order delivery.
  */
 export type ArafStatusReportType =
+  | 'CUSTOMER_INFORMATION_PROVIDED'
   | 'EQUITY_CONFIRMED'
   | 'BOOKING_CONFIRMED'
   | 'BOOKING_FAILED'

@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
+  ArafHttpProvider,
   EncryptedFileStorage,
   IntegrationNotConfiguredError,
   ProviderError,
@@ -91,6 +92,7 @@ export class ProvidersService {
   readonly simStore: SimStore;
   readonly sandbox: SandboxProviderSet;
   private readonly live: ProviderSet;
+  private connectedAraf: ArafHttpProvider | null = null;
   readonly storage: EncryptedFileStorage;
 
   constructor(
@@ -125,6 +127,10 @@ export class ProvidersService {
       malware: new SandboxMalwareScanner(),
     };
     this.live = liveProviders();
+    // Connected to the real AltBank Retail Asset Factory: both environments use it instead of the simulator.
+    if (config.ARAF_MODE === 'connected' && config.ARAF_BASE_URL && config.ARAF_INTEGRATION_SECRET) {
+      this.connectedAraf = new ArafHttpProvider({ baseUrl: config.ARAF_BASE_URL, secret: config.ARAF_INTEGRATION_SECRET });
+    }
     this.storage = new EncryptedFileStorage(config.STORAGE_DIR, crypto.encryptor);
   }
 
@@ -136,10 +142,10 @@ export class ProvidersService {
   for(environment: Environment): ProviderSet {
     if (environment === 'SANDBOX') {
       if (!this.config.isSandbox) throw new IntegrationNotConfiguredError('Sandbox simulators are disabled in this deployment');
-      return this.sandbox;
+      return this.connectedAraf ? { ...this.sandbox, araf: this.connectedAraf } : this.sandbox;
     }
     if (!this.config.LIVE_OPERATIONS_ENABLED) throw new IntegrationNotConfiguredError('Live operations');
-    return this.live;
+    return this.connectedAraf ? { ...this.live, araf: this.connectedAraf } : this.live;
   }
 
   isSimulated(environment: Environment): boolean {

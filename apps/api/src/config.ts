@@ -34,11 +34,26 @@ const schema = z.object({
   WEBHOOK_ALLOW_PRIVATE_NETWORKS: z.enum(['true', 'false']).transform((v) => v === 'true'),
   SANDBOX_ASYNC_DELAY_MS: z.coerce.number().int().min(0).default(1500),
   LIVE_OPERATIONS_ENABLED: z.enum(['true', 'false']).transform((v) => v === 'true'),
+  /**
+   * Connection to the AltBank Retail Asset Factory (ARAF), a separate application.
+   *  - simulator: the built-in sandbox workflow simulator (default)
+   *  - connected: applications are submitted to the real ARAF over its signed integration API,
+   *    ARAF's decisions come back as signed callbacks, and execution reports are sent to it.
+   */
+  ARAF_MODE: z.enum(['simulator', 'connected']).default('simulator'),
+  ARAF_BASE_URL: z.string().url().optional(),
+  /** Shared HMAC secret for the ARAF integration (both directions). From the secrets manager. */
+  ARAF_INTEGRATION_SECRET: z.string().min(32).optional(),
+  /** Bank staff sign in to the admin portal with their ARAF (@altbank.ng) account. */
+  ARAF_SSO_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  /** Comma-separated email domains allowed for Bank staff (e.g. altbank.ng). */
+  STAFF_EMAIL_DOMAINS: z.string().default('altbank.ng,sandbox.altbank.example'),
 });
 
 export type AppConfig = z.infer<typeof schema> & {
   isSandbox: boolean;
   sandboxToolsEnabled: boolean;
+  staffEmailDomains: string[];
 };
 
 /**
@@ -66,9 +81,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (c.PLATFORM_ENVIRONMENT === 'PRODUCTION' && !isProd) problems.push('PRODUCTION records may only be served by APP_ENV=production');
   if (c.LIVE_OPERATIONS_ENABLED && !isProd) problems.push('LIVE_OPERATIONS_ENABLED is only valid in production');
   if (!(c.ENCRYPTION_ACTIVE_KEY in c.ENCRYPTION_KEYS)) problems.push('ENCRYPTION_ACTIVE_KEY not present in ENCRYPTION_KEYS');
+  if ((c.ARAF_MODE === 'connected' || c.ARAF_SSO_ENABLED) && (!c.ARAF_BASE_URL || !c.ARAF_INTEGRATION_SECRET)) problems.push('ARAF_BASE_URL and ARAF_INTEGRATION_SECRET are required to connect to ARAF');
+  if (isProd && c.ARAF_BASE_URL && !c.ARAF_BASE_URL.startsWith('https://')) problems.push('ARAF_BASE_URL must use https');
+  if (isProd && c.STAFF_EMAIL_DOMAINS.split(',').some((d) => d.trim().endsWith('.example'))) problems.push('STAFF_EMAIL_DOMAINS must not include example domains in production');
   if (problems.length) throw new Error(`Unsafe configuration refused: ${problems.join('; ')}`);
   const isSandbox = c.PLATFORM_ENVIRONMENT === 'SANDBOX';
-  return { ...c, isSandbox, sandboxToolsEnabled: isSandbox && !isProd };
+  return { ...c, isSandbox, sandboxToolsEnabled: isSandbox && !isProd, staffEmailDomains: c.STAFF_EMAIL_DOMAINS.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean) };
 }
 
 export const CONFIG = Symbol('CONFIG');

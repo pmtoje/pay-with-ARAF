@@ -1,3 +1,4 @@
+import { ArafReportingService } from './araf-reporting.service';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { z } from 'zod';
 import { ProviderError } from '@araf/integrations';
@@ -42,6 +43,7 @@ export class ArafService {
     private readonly ctx: AppContextService,
     private readonly journey: JourneyService,
     private readonly operations: OperationsService,
+    private readonly arafReports: ArafReportingService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -162,8 +164,23 @@ export class ArafService {
 
   // ---- Inbound status events (authoritative ARAF workflow → Pay with ARAF) --------------
 
-  async callback(rawBody: Buffer | undefined, signature: string | undefined) {
-    if (!rawBody || !signature || !safeEqual(signature, hmacSha256Hex(this.config.INTERNAL_CALLBACK_SECRET, rawBody))) throw new AppError('UNAUTHENTICATED');
+  /**
+   * ARAF callbacks. Connected to the real ARAF: `X-ARAF-Signature: v1=<HMAC-SHA256(ARAF_INTEGRATION_SECRET,
+   * "<timestamp>.POST./api/callbacks/araf.<raw body>")>` with `X-ARAF-Timestamp` within 300 s. The sandbox
+   * simulator path keeps its internal signature.
+   */
+  private verifyCallback(rawBody: Buffer, signature: string, timestamp?: string): boolean {
+    if (this.config.ARAF_MODE === 'connected' && this.config.ARAF_INTEGRATION_SECRET) {
+      const t = Number(timestamp);
+      if (!Number.isInteger(t) || Math.abs(Date.now() / 1000 - t) > 300) return false;
+      const expected = `v1=${hmacSha256Hex(this.config.ARAF_INTEGRATION_SECRET, Buffer.concat([Buffer.from(`${t}.POST./api/callbacks/araf.`), rawBody]))}`;
+      return safeEqual(signature, expected);
+    }
+    return safeEqual(signature, hmacSha256Hex(this.config.INTERNAL_CALLBACK_SECRET, rawBody));
+  }
+
+  async callback(rawBody: Buffer | undefined, signature: string | undefined, timestamp?: string) {
+    if (!rawBody || !signature || !this.verifyCallback(rawBody, signature, timestamp)) throw new AppError('UNAUTHENTICATED');
     return this.ingest(arafEventSchema.parse(JSON.parse(rawBody.toString('utf8'))), { type: 'PROVIDER', id: 'araf', label: 'ARAF workflow' });
   }
 
@@ -223,6 +240,12 @@ export class ArafService {
   async customerProvidesInfo(applicationId: string, note: string, actor: Actor) {
     const app = await this.prisma.financingApplication.findUniqueOrThrow({ where: { id: applicationId } });
     if (app.status !== 'ADDITIONAL_INFORMATION_REQUIRED' || !app.arafReference) throw new AppError('INVALID_STATE');
+    if (this.config.ARAF_MODE === 'connected') {
+      // The real ARAF receives the customer's answer and returns the case to review (INFO_PROVIDED callback).
+      await this.prisma.$transaction((tx) => this.arafReports.record(tx, app, 'CUSTOMER_INFORMATION_PROVIDED', { note: note.slice(0, 1000) }));
+      await this.audit.record(actor, { action: 'araf.customer_information_sent', resourceType: 'APPLICATION', resourceId: app.id });
+      return { outcome: 'SENT_TO_ARAF' };
+    }
     if (app.environment === 'SANDBOX') {
       const c = await this.prisma.simArafCase.findUniqueOrThrow({ where: { arafReference: app.arafReference } });
       await this.prisma.simArafAction.create({ data: { caseId: c.id, stage: c.stage, action: 'CUSTOMER_RESPONDED', actorId: 'customer', actorName: 'Customer', note: note.slice(0, 1000) } });

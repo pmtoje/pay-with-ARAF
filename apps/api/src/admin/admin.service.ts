@@ -210,6 +210,8 @@ export class AdminService implements OnModuleInit {
     const user = input.user_id ? await this.prisma.user.findFirst({ where: { id: input.user_id, type: 'STAFF' } }) : null;
     if (input.user_id && !user) throw new AppError('NOT_FOUND');
     if (!user && (!input.email || !input.full_name)) throw new AppError('VALIDATION_FAILED');
+    // Bank staff accounts are restricted to the Bank's email domains (e.g. @altbank.ng).
+    if (!user && input.email && !this.config.staffEmailDomains.some((d) => input.email!.toLowerCase().endsWith(`@${d}`))) throw new AppError('VALIDATION_FAILED', { fields: [{ path: 'email', message: `Bank staff must use an email address at ${this.config.staffEmailDomains.join(' or ')}` }] });
     return this.prisma.$transaction((tx) =>
       this.approvals.create(
         tx,

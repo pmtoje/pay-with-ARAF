@@ -135,7 +135,7 @@ export class SandboxController {
 export class CallbacksController {
   constructor(
     private readonly journey: JourneyService,
-    @Inject('ARAF_SERVICE') private readonly araf: { callback(raw: Buffer | undefined, sig: string | undefined): Promise<unknown> },
+    @Inject('ARAF_SERVICE') private readonly araf: { callback(raw: Buffer | undefined, sig: string | undefined, timestamp?: string): Promise<unknown> },
   ) {}
 
   /** Authenticated (HMAC-SHA256 over the raw body) status events from the ARAF workflow. */
@@ -143,7 +143,7 @@ export class CallbacksController {
   @HttpCode(200)
   @Public()
   arafEvent(@Req() req: AuthedRequest) {
-    return this.araf.callback(req.rawBody, req.headers['x-araf-signature'] as string | undefined);
+    return this.araf.callback(req.rawBody, req.headers['x-araf-signature'] as string | undefined, req.headers['x-araf-timestamp'] as string | undefined);
   }
 
   /** Authenticated callback from the Bank's account opening platform. */

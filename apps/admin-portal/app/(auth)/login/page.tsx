@@ -7,6 +7,16 @@ import { authApi } from '@/lib/api';
 import { useQueryParam } from '@/lib/hooks';
 import { ErrorAlert } from '@/components/common';
 
+const SSO_ERRORS: Record<string, string> = {
+  DOMAIN: 'Only Bank staff accounts (@altbank.ng) can sign in here.',
+  NOT_PROVISIONED: 'Your ARAF sign-in worked, but you do not have a Pay with ARAF admin account yet. Ask an administrator to give you a role.',
+  DENIED: 'Your account is not active in Pay with ARAF.',
+  STATE: 'The sign-in link expired. Please try again.',
+  EXCHANGE: 'ARAF could not confirm your sign-in. Please try again.',
+  UNAVAILABLE: 'ARAF is not reachable right now. Please try again shortly.',
+  DISABLED: 'Sign in with ARAF is not enabled.',
+};
+
 const REASONS: Record<string, { tone: 'info' | 'warning'; text: string }> = {
   SESSION_EXPIRED: { tone: 'warning', text: 'Your session expired. Sign in again to continue where you left off.' },
   UNAUTHENTICATED: { tone: 'warning', text: 'Your session has ended. Sign in again to continue.' },
@@ -30,9 +40,12 @@ export default function LoginPage() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const ssoError = useQueryParam('sso_error');
+  const [sso, setSso] = useState<{ enabled: boolean; email_domains: string[] } | null>(null);
 
   useEffect(() => {
     document.title = 'Sign in · Pay with ARAF admin';
+    fetch('/api/auth/admin/sso/config', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then(setSso).catch(() => setSso(null));
   }, []);
 
   const submitCredentials = async (e: FormEvent) => {
@@ -81,6 +94,16 @@ export default function LoginPage() {
         {error ? <ErrorAlert error={error} title={step === 'mfa' ? 'Verification failed' : 'Sign-in failed'} /> : null}
       </div>
 
+      {ssoError && step === 'credentials' && <Alert tone="warning" className="mt-5">{SSO_ERRORS[ssoError] ?? 'Sign in with ARAF did not complete.'}</Alert>}
+      {step === 'credentials' && sso?.enabled && (
+        <div className="mt-5 space-y-3">
+          <a href="/api/auth/admin/sso/start" className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-ink px-4 text-sm font-semibold text-ink-contrast hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+            Sign in with ARAF (@{sso.email_domains[0] ?? 'altbank.ng'})
+          </a>
+          <p className="text-center text-xs text-muted">Uses your AltBank Retail Asset Factory account and email code.</p>
+          <div className="flex items-center gap-3 text-xs text-subtle"><span className="h-px flex-1 bg-border" />or sign in with a Pay with ARAF account<span className="h-px flex-1 bg-border" /></div>
+        </div>
+      )}
       {step === 'credentials' ? (
         <form className="mt-5 space-y-4" onSubmit={submitCredentials} noValidate>
           <Field label="Work email" required>

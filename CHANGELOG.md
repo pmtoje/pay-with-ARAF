@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 — 2026-11-26
+### Added
+- Connection to the real ARAF (D-034), keeping the repositories separate:
+  * `ARAF_MODE=connected` submits applications to ARAF's signed integration API instead of the
+    simulator (`ArafHttpProvider`), verifies ARAF's timestamped `v1=` callback signatures, and
+    reports the customer's reply to an information request (`CUSTOMER_INFORMATION_PROVIDED`).
+  * Staff single sign-on with an ARAF (@altbank.ng) account: `/api/auth/admin/sso/start`, `/callback`
+    and `/config`, plus a "Sign in with ARAF" button on the admin sign-in page.
+  * Staff email domains are enforced for new staff and for admin password sign-in
+    (`STAFF_EMAIL_DOMAINS`).
+  * Config validation, environment templates and `documentation/ARAF_CONNECTION.md`.
+  * Tests: connected journey against a stand-in ARAF, callback signature refusals, and the sign-in
+    success and refusal paths.
+
 ## 0.4.0 — 2026-11-26
 ### Added
 - ARAF merchant fee (D-033): 2% of the purchase amount (equity included) per processed transaction,
