@@ -7,6 +7,7 @@ import {
   evaluateReleaseGate,
   evaluateVendorPaymentPreconditions,
   formatNaira,
+  EQUITY_PAYABLE_STATES,
   type PaymentStatus as GatePaymentStatus,
 } from '@araf/business-rules';
 import { ProviderError } from '@araf/integrations';
@@ -115,19 +116,19 @@ export class OperationsService implements OnModuleInit {
 
   // ---- Approval → documentation ---------------------------------------------------------
 
-  private renderDocument(type: string, ctx: { reference: string; partner: string; customer: string; items: string; financing: bigint; profit: bigint; dsp: bigint; tenor: number; monthly: bigint; sandbox: boolean }): string {
+  private renderDocument(type: string, ctx: { reference: string; partner: string; customer: string; items: string; purchase: bigint; equity: bigint; financing: bigint; ratePa: number; profit: bigint; dsp: bigint; tenor: number; monthly: bigint; sandbox: boolean }): string {
     const k = (v: bigint) => formatNaira(v);
     const banner = ctx.sandbox ? '[SANDBOX — SYNTHETIC DOCUMENT — NOT LEGALLY BINDING]\n\n' : '';
     const draft = '\n\nTEMPLATE STATUS: Proposed wording pending approval by the Bank’s Legal and Shariah governance functions.';
     switch (type) {
       case 'PROMISE_TO_PURCHASE':
-        return `${banner}PROMISE TO PURCHASE (WA’D)\nApplication ${ctx.reference}\n\nI, ${ctx.customer}, request The Alternative Bank to purchase the following asset from ${ctx.partner}: ${ctx.items}.\nI undertake that, once the Bank has acquired the asset, I will purchase it from the Bank under a Murabaha sale at a cost of ${k(ctx.financing)} plus a disclosed profit of ${k(ctx.profit)}, a deferred sale price of ${k(ctx.dsp)} payable over ${ctx.tenor} months.\nThis promise is not itself a sale contract.${draft}`;
+        return `${banner}PROMISE TO PURCHASE (WA’D)\nApplication ${ctx.reference}\n\nI, ${ctx.customer}, request The Alternative Bank to purchase the following asset from ${ctx.partner}: ${ctx.items}.\nI undertake that, once the Bank has acquired the asset, I will purchase it from the Bank under a Murabaha sale at a cost of ${k(ctx.financing)} plus a disclosed profit of ${k(ctx.profit)}, a deferred sale price of ${k(ctx.dsp)} payable over ${ctx.tenor} months.${ctx.equity > 0n ? `\nI will pay equity of ${k(ctx.equity)} directly to ${ctx.partner} towards the purchase price of ${k(ctx.purchase)}; the Bank finances only the remaining ${k(ctx.financing)}.` : ''}\nThis promise is not itself a sale contract.${draft}`;
       case 'OFFER_LETTER':
-        return `${banner}FINANCING OFFER LETTER\nApplication ${ctx.reference}\n\nFinancing structure: Murabaha (cost-plus sale)\nAsset cost: ${k(ctx.financing)}\nProfit (total, disclosed): ${k(ctx.profit)}\nDeferred sale price: ${k(ctx.dsp)}\nTenor: ${ctx.tenor} months\nMonthly repayment: ${k(ctx.monthly)} (final instalment adjusted to reconcile exactly)\nConditions: signed promise to purchase; active repayment mandate; Bank acquisition of the asset; executed sale agreement.${draft}`;
+        return `${banner}FINANCING OFFER LETTER\nApplication ${ctx.reference}\n\nFinancing structure: Murabaha (cost-plus sale)\nPurchase price: ${k(ctx.purchase)}\nCustomer equity paid to ${ctx.partner}: ${k(ctx.equity)}\nAmount financed by the Bank (asset cost to the Bank): ${k(ctx.financing)}\nProfit rate: ${ctx.ratePa}% per annum, charged on the financed amount only\nProfit (total, disclosed): ${k(ctx.profit)}\nDeferred sale price: ${k(ctx.dsp)}\nTenor: ${ctx.tenor} months\nMonthly repayment: ${k(ctx.monthly)} (final instalment adjusted to reconcile exactly)\nConditions: signed promise to purchase; active repayment mandate; Bank acquisition of the asset; executed sale agreement.${draft}`;
       case 'VENDOR_INVOICE':
         return `${banner}PROFORMA INVOICE (Buyer: The Alternative Bank)\nRef INV-${ctx.reference}\nSeller: ${ctx.partner}\nItems: ${ctx.items}\nTotal payable by the Bank: ${k(ctx.financing)}\nDelivery: to the Bank’s customer as agent of the Bank, upon written release authorisation.`;
       case 'SALE_AGREEMENT':
-        return `${banner}MURABAHA SALE AGREEMENT\nApplication ${ctx.reference}\n\nThe Alternative Bank (Seller) has acquired the asset (${ctx.items}) from ${ctx.partner} at a cost of ${k(ctx.financing)} and hereby sells it to ${ctx.customer} (Buyer).\nDisclosed acquisition cost: ${k(ctx.financing)}\nDisclosed profit: ${k(ctx.profit)}\nDeferred sale price: ${k(ctx.dsp)} payable in ${ctx.tenor} monthly instalments of ${k(ctx.monthly)} (final instalment adjusted).\nOwnership passes to the Buyer on execution of this agreement; the vendor will then be authorised to release the goods.${draft}`;
+        return `${banner}MURABAHA SALE AGREEMENT\nApplication ${ctx.reference}\n\nThe Alternative Bank (Seller) has acquired the asset (${ctx.items}) from ${ctx.partner} at a cost of ${k(ctx.financing)} and hereby sells it to ${ctx.customer} (Buyer).\nDisclosed acquisition cost: ${k(ctx.financing)}${ctx.equity > 0n ? ` (purchase price ${k(ctx.purchase)} less the Buyer's equity of ${k(ctx.equity)} paid to ${ctx.partner})` : ''}\nDisclosed profit: ${k(ctx.profit)}\nDeferred sale price: ${k(ctx.dsp)} payable in ${ctx.tenor} monthly instalments of ${k(ctx.monthly)} (final instalment adjusted).\nOwnership passes to the Buyer on execution of this agreement; the vendor will then be authorised to release the goods.${draft}`;
       default:
         return '';
     }
@@ -145,7 +146,10 @@ export class OperationsService implements OnModuleInit {
       partner: partner.tradingName,
       customer: `${customer.firstName} ${customer.lastName}`,
       items: items.map((i) => `${i.quantity} × ${i.name}`).join(', '),
+      purchase: offer.purchaseAmountKobo,
+      equity: offer.contributionKobo,
       financing: offer.financingAmountKobo,
+      ratePa: offer.annualProfitRateBps / 100,
       profit: offer.profitKobo,
       dsp: offer.deferredSalePriceKobo,
       tenor: offer.tenorMonths,
@@ -177,6 +181,7 @@ export class OperationsService implements OnModuleInit {
     await tx.repaymentMandate.upsert({ where: { applicationId: app.id }, create: { applicationId: app.id, provider: 'REMITA', status: 'NOT_STARTED' }, update: {} });
     await this.state.transitionApplication(tx, app, 'DOCUMENTATION_PENDING', actor);
     await this.journey.notifyCustomer(tx, app, 'FINANCING_APPROVED');
+    if (app.contributionAmountKobo > 0n && !app.contributionVerified) await this.journey.notifyCustomer(tx, app, 'EQUITY_PAYABLE');
   }
 
   async documentPdf(applicationId: string, documentId: string) {
@@ -714,6 +719,33 @@ export class OperationsService implements OnModuleInit {
     const app = await tx.financingApplication.findFirst({ where: { orderId: order.id, status: { notIn: ['CANCELLED', 'EXPIRED', 'DECLINED'] } }, orderBy: { createdAt: 'desc' } });
     if (!app) throw new AppError('NOT_FOUND');
     return { order, app: await this.ctx.lockApplication(tx, app.id) };
+  }
+
+  /**
+   * The merchant confirms it has received the customer's equity towards the item (a down payment
+   * collected by the merchant, not by the Bank). The amount must equal the agreed equity exactly.
+   * Only after this may the Bank pay the vendor — and it pays only the financed remainder.
+   */
+  async confirmEquity(partnerId: string, environment: Environment, orderRef: string, body: unknown, actor: Actor) {
+    const input = z.object({ amount: z.number().int().positive(), payment_reference: z.string().trim().regex(/^[A-Za-z0-9._\-]{4,64}$/) }).strict().parse(body);
+    return this.prisma.$transaction(async (tx) => {
+      const { app } = await this.appForOrder(tx, partnerId, environment, orderRef);
+      if (app.contributionAmountKobo <= 0n) throw new AppError('EQUITY_NOT_REQUIRED');
+      if (app.contributionVerified) {
+        if (app.contributionReference === input.payment_reference && BigInt(input.amount) === app.contributionAmountKobo) return { status: 'CONFIRMED', idempotent_replay: true };
+        throw new AppError('EQUITY_ALREADY_CONFIRMED');
+      }
+      if (!(EQUITY_PAYABLE_STATES as readonly string[]).includes(app.status)) throw new AppError('INVALID_STATE', { reason: 'Equity is payable once the Bank has approved the financing and before vendor payment.' });
+      if (BigInt(input.amount) !== app.contributionAmountKobo) {
+        await this.audit.record(actor, { action: 'equity.confirmation_rejected', resourceType: 'APPLICATION', resourceId: app.id, partnerId, outcome: 'DENIED', reason: 'AMOUNT_MISMATCH' }, tx);
+        throw new AppError('EQUITY_AMOUNT_MISMATCH');
+      }
+      await tx.financingApplication.update({ where: { id: app.id }, data: { contributionVerified: true, contributionReference: input.payment_reference, contributionConfirmedAt: new Date() } });
+      await this.audit.record(actor, { action: 'equity.confirmed', resourceType: 'APPLICATION', resourceId: app.id, partnerId, after: { amount_kobo: app.contributionAmountKobo.toString(), payment_reference: input.payment_reference } }, tx);
+      await this.emit(tx, app, 'application.equity_confirmed', { equity_amount: Number(app.contributionAmountKobo), equity_payment_reference: input.payment_reference });
+      await this.journey.notifyCustomer(tx, app, 'EQUITY_CONFIRMED');
+      return { status: 'CONFIRMED', idempotent_replay: false };
+    });
   }
 
   async fulfil(partnerId: string, environment: Environment, orderRef: string, body: unknown, actor: Actor) {

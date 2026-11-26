@@ -134,6 +134,9 @@ export function milestones(v: View): Milestone[] {
     { id: 'approved', title: 'Financing approved', description: 'Final approval from the Bank.', done: done.approved },
     { id: 'documents', title: 'Documents signed', description: 'Promise to purchase and offer letter, signed with a one-time code.', done: done.documents, attention: s === 'DOCUMENTATION_PENDING' },
     { id: 'mandate', title: 'Repayment mandate active', description: 'Direct debit authorised for your repayments.', done: done.mandate, attention: s === 'MANDATE_PENDING' },
+    ...(v.equity?.required
+      ? [{ id: 'equity', title: 'Equity paid to the merchant', description: `Your equity of ₦${(v.equity.amount / 100).toLocaleString('en-NG')} is paid to the merchant, not the Bank.`, done: v.equity.status === 'CONFIRMED', attention: v.equity.payable }]
+      : []),
     { id: 'purchase', title: 'Bank purchases your item', description: 'The Bank buys the item from the vendor.', done: done.purchase },
     { id: 'sale', title: 'Sale agreement executed', description: 'The Bank sells the item to you at the agreed deferred sale price.', done: done.sale, attention: s === 'VENDOR_PAYMENT_CONFIRMED' && hasDoc(v, 'SALE_AGREEMENT') },
     { id: 'release', title: 'Released for dispatch', description: 'The vendor is authorised to release your item.', done: done.release },

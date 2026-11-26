@@ -106,6 +106,29 @@ async function main() {
   const checker = await staff('partner.approver');
   const existing = (await maker.req('GET', '/api/admin/partners?q=AltMall')).find((p) => p.trading_name === 'AltMall');
   if (existing && existing.status === 'SANDBOX_ACTIVE' && existsSync(resolve(root, 'apps/altmall-demo/.env.local'))) {
+    // Upgrade sandboxes onboarded before customer equity and per-annum product pricing (maker-checker).
+    const detail = await maker.req('GET', `/api/admin/partners/${existing.id}`);
+    const active = detail.configurations.find((c) => c.status === 'ACTIVE');
+    if (active && (!active.partial_financing_enabled || active.annual_profit_rate_percent !== 25)) {
+      const proposed = await maker.req('POST', `/api/admin/partners/${existing.id}/configuration`, {
+        min_transaction_naira: active.min_transaction_kobo / 100,
+        max_transaction_naira: active.max_transaction_kobo / 100,
+        permitted_products: active.permitted_products,
+        permitted_tenors: active.permitted_tenors.filter((t) => t <= 24),
+        eligible_categories: active.eligible_categories,
+        application_expiry_minutes: active.application_expiry_minutes,
+        order_reservation_minutes: active.order_reservation_minutes,
+        partial_financing_enabled: true,
+        annual_profit_rate_percent: 25,
+        allow_multiple_vendors: active.allow_multiple_vendors,
+        settlement_arrangement: active.settlement_arrangement,
+        return_url_origins: detail.domains.filter((d) => d.kind === 'RETURN_URL_ORIGIN').map((d) => d.value),
+      });
+      const approval = (await checker.req('GET', '/api/admin/approvals?status=PENDING')).find((x) => x.resource_id === proposed.id);
+      if (approval) await checker.req('POST', `/api/admin/approvals/${approval.id}/decide`, { decision: 'APPROVE', comment: 'Customer equity and 25% p.a. product rate for the sandbox demo (checker).' });
+      console.log(`AltMall configuration v${proposed.version}: customer equity enabled, 25% p.a. (maker-checker approved).`);
+      return;
+    }
     console.log('AltMall is already onboarded and configured. Nothing to do.');
     return;
   }
@@ -137,7 +160,8 @@ async function main() {
       eligible_categories: ['smartphones', 'laptops', 'televisions', 'refrigerators', 'washing-machines', 'furniture', 'solar', 'electronics', 'appliances'],
       application_expiry_minutes: 1440,
       order_reservation_minutes: 4320,
-      partial_financing_enabled: false,
+      partial_financing_enabled: true, // customer equity (down payment to AltMall)
+      annual_profit_rate_percent: 25, // AltMall product rate: 25% per annum
       allow_multiple_vendors: false,
       settlement_arrangement: 'DIRECT_TO_VENDOR',
       return_url_origins: [ALTMALL],

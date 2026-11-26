@@ -4,7 +4,9 @@ import {
   assessSalary,
   compareEligibilityToCart,
   computeEligibility,
+  equityBounds,
   exposureAmountFor,
+  validateEquity,
   formatNaira,
   isApprovedTenor,
   isOfferAffordable,
@@ -15,6 +17,7 @@ import {
   scheduleWithDates,
   addMonths,
   type CreditPolicyRules,
+  type ProductPricing,
   type StatementCredit,
 } from '@araf/business-rules';
 import { sha256Hex } from '@araf/security';
@@ -32,6 +35,10 @@ import { renderSimplePdf } from '../common/pdf';
 import type { AuthedRequest } from '../auth/auth.guard';
 
 export const TERMS_VERSION = 'ARAF-MURABAHA-INDICATIVE-2026.11';
+/** Affordability outcomes that allow an offer (PARTIAL is the pre-equity legacy name). */
+const OFFERABLE_OUTCOMES = ['ELIGIBLE', 'EQUITY_REQUIRED', 'PARTIAL'];
+const pricingOf = (x: { annualProfitRateBps: number }): ProductPricing => ({ annualProfitRateBps: x.annualProfitRateBps });
+
 const TERMS_TEXT =
   'This is an indicative financing offer for a Murabaha (cost-plus sale) asset financing. It is not final approval and not a sale contract. Final approval is subject to the Bank’s review, documentation, repayment mandate and acquisition of the asset by the Bank. The profit markup is a disclosed profit on the sale of the asset, not interest.';
 
@@ -70,15 +77,42 @@ export class EligibilityService {
     const policy = await this.ctx.policyFor(app.creditPolicyVersionId);
     const config = await this.ctx.partnerConfig(app.partnerId);
     const result = await this.prisma.statementAnalysisResult.findFirstOrThrow({ where: { applicationId }, orderBy: { createdAt: 'desc' } });
+    // Both checks are mandatory inputs: the SeedFi credit check (bureau obligations) and the
+    // Periculum statement analysis. Affordability never runs on a missing check.
     const credit = await this.prisma.creditAssessment.findFirst({ where: { applicationId, status: 'COMPLETED' }, orderBy: { createdAt: 'desc' } });
     const policyVersionId = app.creditPolicyVersionId;
-
-    if (app.incomeProfile === 'BUSINESS_OWNER' && policy.businessOwnerManualReview) {
+    if (!credit) {
       await this.prisma.$transaction(async (tx) => {
         const locked = await this.ctx.lockApplication(tx, applicationId);
-        await tx.affordabilityAssessment.create({ data: { applicationId, policyVersionId, analysisResultId: result.id, incomeProfile: 'BUSINESS_OWNER', outcome: 'MANUAL_REVIEW', reasons: ['BUSINESS_OWNER_MANUAL_REVIEW'] } });
-        await this.routeToReview(tx, locked, 'BUSINESS_OWNER', `Business owner — 12-month statement analysis requires manual review (${policy.businessOwnerContactWindowHours.min}–${policy.businessOwnerContactWindowHours.max}h contact target).`, policy);
+        await tx.affordabilityAssessment.create({ data: { applicationId, policyVersionId, analysisResultId: result.id, incomeProfile: app.incomeProfile ?? 'SALARY_EARNER', outcome: 'MANUAL_REVIEW', reasons: ['CREDIT_CHECK_MISSING'] } });
+        await this.routeToReview(tx, locked, 'INCONSISTENT_STATEMENT', 'No completed SeedFi credit check is on file — affordability cannot be computed automatically.', policy);
       });
+      return;
+    }
+
+    if (app.incomeProfile === 'BUSINESS_OWNER') {
+      const turnover = result.businessRevenueMonthlyKobo;
+      const reasons = policy.businessOwnerManualReview
+        ? ['BUSINESS_OWNER_MANUAL_REVIEW']
+        : !result.reliable
+          ? ['STATEMENT_UNRELIABLE']
+          : !turnover || turnover <= 0n
+            ? ['BUSINESS_TURNOVER_NOT_VERIFIED']
+            : [];
+      if (reasons.length) {
+        await this.prisma.$transaction(async (tx) => {
+          const locked = await this.ctx.lockApplication(tx, applicationId);
+          await tx.affordabilityAssessment.create({ data: { applicationId, policyVersionId, analysisResultId: result.id, incomeProfile: 'BUSINESS_OWNER', outcome: 'MANUAL_REVIEW', reasons } });
+          await this.routeToReview(tx, locked, 'BUSINESS_OWNER', `Business owner — ${policy.statementMonths.BUSINESS_OWNER}-month statement analysis requires manual review (${reasons.join(', ')}; ${policy.businessOwnerContactWindowHours.min}–${policy.businessOwnerContactWindowHours.max}h contact target).`, policy);
+        });
+        return;
+      }
+      // Business owners: repayments (existing + proposed) may not exceed 10% of average monthly turnover.
+      const obligations = resolveExistingObligations(credit.bureauMonthlyObligationsKobo ?? null, result.recurringObligationsKobo, policy);
+      const bvn = await this.journey.customerBvn(app.customerId!);
+      const c = { correlationId, applicationReference: app.reference, applicationId };
+      const exposure = await this.providers.call(app.environment, 'CORE_BANKING', 'customer_exposure', c, () => this.providers.for(app.environment).coreBanking.getCustomerExposure(bvn, c));
+      await this.computeAndReserve(applicationId, { recognisedIncome: turnover!, obligations, existingExposure: exposure.totalExposure, analysisResultId: result.id });
       return;
     }
 
@@ -104,7 +138,7 @@ export class EligibilityService {
       return;
     }
 
-    const obligations = resolveExistingObligations(credit?.bureauMonthlyObligationsKobo ?? null, result.recurringObligationsKobo, policy);
+    const obligations = resolveExistingObligations(credit.bureauMonthlyObligationsKobo ?? null, result.recurringObligationsKobo, policy);
     const bvn = await this.journey.customerBvn(app.customerId!);
     const c = { correlationId, applicationReference: app.reference, applicationId };
     const exposure = await this.providers.call(app.environment, 'CORE_BANKING', 'customer_exposure', c, () => this.providers.for(app.environment).coreBanking.getCustomerExposure(bvn, c));
@@ -129,8 +163,12 @@ export class EligibilityService {
       // Lock the obligor so concurrent applications serialise their exposure reservations.
       await tx.$queryRawUnsafe('SELECT id FROM customers WHERE id = $1 FOR UPDATE', app.customerId);
       const others = await this.otherReservations(tx, app.customerId!, app.id);
+      const pricing = pricingOf(app);
+      const incomeBasis = app.incomeProfile === 'BUSINESS_OWNER' ? 'BUSINESS_OWNER' : 'SALARY_EARNER';
       const elig = computeEligibility(
         {
+          incomeBasis,
+          pricing,
           recognisedMonthlyIncome: input.recognisedIncome,
           existingMonthlyObligations: input.obligations,
           exposure: { existingBankExposure: input.existingExposure, otherActiveReservations: others },
@@ -139,13 +177,13 @@ export class EligibilityService {
         },
         policy,
       );
-      const partial = policy.partialFinancingEnabled && config.partialFinancingEnabled;
-      const cmp = compareEligibilityToCart(elig.maxEligibleAmount, app.purchaseAmountKobo, partial, BigInt(policy.minimumFinancingKobo));
-      const outcome = cmp.outcome === 'FULL_FINANCING' ? 'ELIGIBLE' : cmp.outcome === 'PARTIAL_FINANCING' ? 'PARTIAL' : cmp.outcome;
+      const equityEnabled = policy.customerEquityEnabled && config.partialFinancingEnabled;
+      const cmp = compareEligibilityToCart(elig.maxEligibleAmount, app.purchaseAmountKobo, equityEnabled, BigInt(policy.minimumFinancingKobo));
+      const outcome = cmp.outcome === 'FULL_FINANCING' ? 'ELIGIBLE' : cmp.outcome;
       const reasons = [
         ...(cmp.outcome === 'DECLINED' ? [elig.capacity === 0n ? 'NO_REPAYMENT_CAPACITY' : elig.remainingExposure === 0n ? 'EXPOSURE_LIMIT_REACHED' : cmp.reason] : []),
         ...(cmp.outcome === 'CART_REVISION_REQUIRED' ? ['CART_REVISION_REQUIRED'] : []),
-        ...(cmp.outcome === 'PARTIAL_FINANCING' ? ['PARTIAL_FINANCING'] : []),
+        ...(cmp.outcome === 'EQUITY_REQUIRED' ? ['EQUITY_REQUIRED'] : []),
       ];
       await tx.affordabilityAssessment.create({
         data: {
@@ -179,16 +217,25 @@ export class EligibilityService {
         await this.journey.emitMerchant(tx, app, 'application.action_required', { reason: 'CART_REVISION_REQUIRED' });
         return;
       }
-      const financing = cmp.financingAmount;
-      const reserveAmount = exposureAmountFor(financing, Math.max(...elig.tenors.filter((t) => t.eligibleAmount >= financing).map((t) => t.tenorMonths)), policy);
+      // Keep a customer's earlier equity choice if it is still valid; otherwise start at the minimum.
+      const bounds = equityBounds(app.purchaseAmountKobo, elig.maxEligibleAmount, BigInt(policy.minimumFinancingKobo), equityEnabled);
+      const contribution = validateEquity(app.contributionAmountKobo, bounds, equityEnabled) === null ? app.contributionAmountKobo : bounds.minEquity;
+      const financing = app.purchaseAmountKobo - contribution;
+      const reserveAmount = this.reservationFor(financing, elig.tenors, policy, pricing);
       await tx.exposureReservation.upsert({
         where: { applicationId },
         create: { applicationId, customerId: app.customerId!, amountKobo: reserveAmount, status: 'ACTIVE', expiresAt: new Date(Date.now() + policy.offerValidityMinutes * 60_000 + 7 * 86_400_000) },
         update: { amountKobo: reserveAmount, status: 'ACTIVE', releasedAt: null },
       });
-      await tx.financingApplication.update({ where: { id: app.id }, data: { contributionAmountKobo: cmp.contributionAmount } });
+      await tx.financingApplication.update({ where: { id: app.id }, data: { contributionAmountKobo: contribution } });
       await this.journey.emitMerchant(tx, app, 'application.eligible');
     });
+  }
+
+  /** Exposure reserved for a financed amount, at the longest tenor that can carry it. */
+  private reservationFor(financing: bigint, tenors: Array<{ tenorMonths: number; eligibleAmount: bigint }>, policy: CreditPolicyRules, pricing: ProductPricing) {
+    const fits = tenors.filter((t) => t.eligibleAmount >= financing).map((t) => t.tenorMonths);
+    return exposureAmountFor(financing, fits.length ? Math.max(...fits) : Math.max(...tenors.map((t) => t.tenorMonths)), policy, pricing);
   }
 
   private async decline(tx: Tx, app: FinancingApplication, reason: string) {
@@ -208,7 +255,7 @@ export class EligibilityService {
   // ---- Offers -----------------------------------------------------------------------------
 
   private async latestAssessment(applicationId: string) {
-    const a = await this.prisma.affordabilityAssessment.findFirst({ where: { applicationId, outcome: { in: ['ELIGIBLE', 'PARTIAL'] } }, orderBy: { createdAt: 'desc' } });
+    const a = await this.prisma.affordabilityAssessment.findFirst({ where: { applicationId, outcome: { in: OFFERABLE_OUTCOMES } }, orderBy: { createdAt: 'desc' } });
     if (!a) throw new AppError('INVALID_STATE');
     return a;
   }
@@ -220,20 +267,64 @@ export class EligibilityService {
     const policy = await this.ctx.policyFor(app.creditPolicyVersionId);
     const config = await this.ctx.partnerConfig(app.partnerId);
     const a = await this.latestAssessment(applicationId);
+    const pricing = pricingOf(app);
     const financing = app.purchaseAmountKobo - app.contributionAmountKobo;
+    const equityEnabled = policy.customerEquityEnabled && config.partialFinancingEnabled;
+    const bounds = equityBounds(app.purchaseAmountKobo, a.maxEligibleKobo!, BigInt(policy.minimumFinancingKobo), equityEnabled);
     return {
       purchase_amount: Number(app.purchaseAmountKobo),
       financing_amount: Number(financing),
       contribution: Number(app.contributionAmountKobo),
       max_eligible_amount: Number(a.maxEligibleKobo),
+      annual_profit_rate_percent: pricing.annualProfitRateBps / 100,
+      max_tenor_months: policy.maxTenorMonths,
+      equity: {
+        enabled: equityEnabled,
+        required: bounds.minEquity > 0n,
+        min: Number(bounds.minEquity),
+        max: Number(bounds.maxEquity),
+        amount: Number(app.contributionAmountKobo),
+        payee: 'MERCHANT',
+      },
       options: policy.approvedTenorsMonths
-        .filter((t) => config.permittedTenors.includes(t))
+        .filter((t) => config.permittedTenors.includes(t) && t <= policy.maxTenorMonths)
         .map((t) => {
-          const p = priceDeferredSale(financing, t, policy);
-          const affordable = isOfferAffordable(financing, t, a.capacityKobo!, a.remainingExposureKobo! , policy);
-          return { tenor_months: t, markup_percent_total: p.markupBps / 100, profit: Number(p.profitAmount), deferred_sale_price: Number(p.deferredSalePrice), monthly_repayment: Number(p.monthlyRepayment), final_instalment: Number(p.instalments[p.instalments.length - 1].amount), affordable };
+          const p = priceDeferredSale(financing, t, policy, pricing);
+          const affordable = financing <= a.maxEligibleKobo! && isOfferAffordable(financing, t, a.capacityKobo!, a.remainingExposureKobo!, policy, pricing);
+          return { tenor_months: t, annual_profit_rate_percent: pricing.annualProfitRateBps / 100, markup_percent_total: p.markupBps / 100, profit: Number(p.profitAmount), deferred_sale_price: Number(p.deferredSalePrice), monthly_repayment: Number(p.monthlyRepayment), final_instalment: Number(p.instalments[p.instalments.length - 1].amount), affordable };
         }),
     };
+  }
+
+  /**
+   * Customer equity (down payment) towards the item, paid to the merchant. Equity reduces the
+   * BASE amount: financed = purchase − equity, and the profit markup applies only to the financed
+   * amount. Changing equity withdraws any presented offer so pricing is always recomputed.
+   */
+  async setEquity(applicationId: string, body: unknown, req: AuthedRequest) {
+    const { amount } = z.object({ amount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }).strict().parse(body);
+    const equity = BigInt(amount);
+    await this.prisma.$transaction(async (tx) => {
+      const app = await this.ctx.lockApplication(tx, applicationId);
+      if (!['ELIGIBLE', 'OFFER_PRESENTED'].includes(app.status)) throw new AppError('INVALID_STATE');
+      const policy = await this.ctx.policyFor(app.creditPolicyVersionId, tx);
+      const config = await this.ctx.partnerConfig(app.partnerId, tx);
+      const a = await tx.affordabilityAssessment.findFirst({ where: { applicationId }, orderBy: { createdAt: 'desc' } });
+      if (!a || !OFFERABLE_OUTCOMES.includes(a.outcome)) throw new AppError('INVALID_STATE');
+      const enabled = policy.customerEquityEnabled && config.partialFinancingEnabled;
+      const bounds = equityBounds(app.purchaseAmountKobo, a.maxEligibleKobo!, BigInt(policy.minimumFinancingKobo), enabled);
+      const problem = validateEquity(equity, bounds, enabled);
+      if (problem) throw new AppError('VALIDATION_FAILED', { fields: [{ path: 'amount', message: problem }], min: Number(bounds.minEquity), max: Number(bounds.maxEquity) });
+      const financing = app.purchaseAmountKobo - equity;
+      const tenors = (a.tenorBreakdown as Array<{ tenor_months: number; eligible_amount: number }> | null) ?? [];
+      const reserve = this.reservationFor(financing, tenors.map((t) => ({ tenorMonths: t.tenor_months, eligibleAmount: BigInt(t.eligible_amount) })), policy, pricingOf(app));
+      await tx.exposureReservation.updateMany({ where: { applicationId, status: 'ACTIVE' }, data: { amountKobo: reserve } });
+      await tx.financingOffer.updateMany({ where: { applicationId, status: 'PRESENTED' }, data: { status: 'SUPERSEDED' } });
+      if (app.status === 'OFFER_PRESENTED') await this.state.transitionApplication(tx, app, 'ELIGIBLE', req.actor, { reason: 'EQUITY_CHANGED' });
+      await tx.financingApplication.update({ where: { id: app.id }, data: { contributionAmountKobo: equity, contributionVerified: false, contributionReference: null, contributionConfirmedAt: null } });
+      await this.audit.record(req.actor, { action: 'application.equity_selected', resourceType: 'APPLICATION', resourceId: app.id, after: { equity_kobo: equity.toString(), financed_kobo: financing.toString() } }, tx);
+    });
+    return this.journey.view(applicationId, req);
   }
 
   async selectTenor(applicationId: string, body: unknown, req: AuthedRequest) {
@@ -246,12 +337,14 @@ export class EligibilityService {
       if (!isApprovedTenor(tenor_months, policy) || !config.permittedTenors.includes(tenor_months)) throw new AppError('TENOR_NOT_SUPPORTED');
       const latest = await tx.affordabilityAssessment.findFirst({ where: { applicationId }, orderBy: { createdAt: 'desc' } });
       if (latest?.outcome === 'CART_REVISION_REQUIRED') throw new AppError('OFFER_NOT_AFFORDABLE', { reason: 'CART_REVISION_REQUIRED' });
-      const a = latest && ['ELIGIBLE', 'PARTIAL'].includes(latest.outcome) ? latest : null;
+      const a = latest && OFFERABLE_OUTCOMES.includes(latest.outcome) ? latest : null;
       if (!a) throw new AppError('INVALID_STATE');
       const financing = app.purchaseAmountKobo - app.contributionAmountKobo;
       // Server-side re-verification: the customer cannot select an unaffordable option.
-      if (!isOfferAffordable(financing, tenor_months, a.capacityKobo!, a.remainingExposureKobo!, policy)) throw new AppError('OFFER_NOT_AFFORDABLE');
-      const pricing = priceDeferredSale(financing, tenor_months, policy);
+      if (financing < BigInt(policy.minimumFinancingKobo)) throw new AppError('OFFER_NOT_AFFORDABLE', { reason: 'BELOW_MINIMUM_FINANCING' });
+      if (financing > a.maxEligibleKobo!) throw new AppError('OFFER_NOT_AFFORDABLE', { reason: 'EQUITY_REQUIRED' });
+      if (!isOfferAffordable(financing, tenor_months, a.capacityKobo!, a.remainingExposureKobo!, policy, pricingOf(app))) throw new AppError('OFFER_NOT_AFFORDABLE');
+      const pricing = priceDeferredSale(financing, tenor_months, policy, pricingOf(app));
       await tx.financingOffer.updateMany({ where: { applicationId, status: 'PRESENTED' }, data: { status: 'SUPERSEDED' } });
       const reference = await this.refs.next('OFR', { tx });
       const firstDue = addMonths(new Date(), 1);
@@ -265,7 +358,8 @@ export class EligibilityService {
           financingAmountKobo: financing,
           contributionKobo: app.contributionAmountKobo,
           tenorMonths: tenor_months,
-          markupBps: pricing.markupBps,
+          markupBps: Math.round(pricing.markupBps),
+          annualProfitRateBps: pricing.annualProfitRateBps,
           profitKobo: pricing.profitAmount,
           deferredSalePriceKobo: pricing.deferredSalePrice,
           monthlyRepaymentKobo: pricing.monthlyRepayment,
@@ -295,8 +389,10 @@ export class EligibilityService {
       }
       // Pricing changes never alter an offer: acceptance is bound to the offer's own policy version.
       const policy = await this.ctx.policyFor(offer.policyVersionId, tx);
-      const a = await tx.affordabilityAssessment.findFirst({ where: { applicationId, outcome: { in: ['ELIGIBLE', 'PARTIAL'] } }, orderBy: { createdAt: 'desc' } });
-      if (!a || !isOfferAffordable(offer.financingAmountKobo, offer.tenorMonths, a.capacityKobo!, a.remainingExposureKobo!, policy)) throw new AppError('OFFER_NOT_AFFORDABLE');
+      const a = await tx.affordabilityAssessment.findFirst({ where: { applicationId, outcome: { in: OFFERABLE_OUTCOMES } }, orderBy: { createdAt: 'desc' } });
+      if (!a || !isOfferAffordable(offer.financingAmountKobo, offer.tenorMonths, a.capacityKobo!, a.remainingExposureKobo!, policy, pricingOf(offer))) throw new AppError('OFFER_NOT_AFFORDABLE');
+      // The offer must reflect the customer's current equity choice.
+      if (offer.contributionKobo !== app.contributionAmountKobo || offer.financingAmountKobo !== app.purchaseAmountKobo - app.contributionAmountKobo) throw new AppError('INVALID_STATE');
       // Cart integrity: the order must still match the session snapshot.
       const session = await tx.checkoutSession.findUniqueOrThrow({ where: { id: app.checkoutSessionId } });
       const order = await tx.merchantOrder.findUniqueOrThrow({ where: { id: app.orderId } });
@@ -333,9 +429,10 @@ export class EligibilityService {
       ...items.map((i) => `  ${i.quantity} x ${i.name} - ${k(i.lineAmountKobo)}`),
       '',
       `Purchase amount:          ${k(offer.purchaseAmountKobo)}`,
-      `Customer contribution:    ${k(offer.contributionKobo)}`,
-      `Financing amount (cost):  ${k(offer.financingAmountKobo)}`,
-      `Profit markup (total):    ${offer.markupBps / 100}% = ${k(offer.profitKobo)}`,
+      `Equity paid to merchant:  ${k(offer.contributionKobo)}`,
+      `Financed by the Bank:     ${k(offer.financingAmountKobo)}  (purchase amount less equity)`,
+      `Profit rate:              ${offer.annualProfitRateBps / 100}% per annum, on the financed amount only`,
+      `Profit markup (total):    ${(offer.annualProfitRateBps * offer.tenorMonths) / 1200}% over ${offer.tenorMonths} months = ${k(offer.profitKobo)}`,
       `Deferred sale price:      ${k(offer.deferredSalePriceKobo)}`,
       `Tenor:                    ${offer.tenorMonths} months`,
       `Monthly repayment:        ${k(offer.monthlyRepaymentKobo)}`,

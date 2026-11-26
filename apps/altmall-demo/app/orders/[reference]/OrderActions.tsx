@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Alert, Button } from '@araf/ui';
-import { payAnotherWay, retryAraf } from '@/app/actions/checkout';
+import { payAnotherWay, payEquity, retryAraf } from '@/app/actions/checkout';
 
 /** Re-fetch the server-confirmed status periodically (bounded), pausing when the tab is hidden. */
 export function AutoRefresh({ intervalMs, maxRuns = 45 }: { intervalMs: number; maxRuns?: number }) {
@@ -27,6 +27,39 @@ export function RefreshButton() {
     <Button variant="secondary" size="sm" loading={pending} onClick={() => start(() => router.refresh())} className="h-9">
       Refresh status
     </Button>
+  );
+}
+
+/** Equity (down payment) paid to AltMall. Demo payment — nothing is charged. */
+export function PayEquity({ reference, amountLabel }: { reference: string; amountLabel: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const pay = async (method: 'card_demo' | 'transfer_demo') => {
+    setBusy(method);
+    setError(null);
+    try {
+      const r = await payEquity(reference, method);
+      if (!r.ok) setError(r.message ?? 'Please try again.');
+      else router.refresh();
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="mt-4 space-y-3">
+      {error && <Alert tone="danger">{error}</Alert>}
+      <div className="flex flex-wrap gap-2">
+        <Button size="lg" onClick={() => pay('card_demo')} loading={busy === 'card_demo'} disabled={!!busy}>
+          Pay {amountLabel} by card (demo)
+        </Button>
+        <Button size="lg" variant="secondary" onClick={() => pay('transfer_demo')} loading={busy === 'transfer_demo'} disabled={!!busy}>
+          Bank transfer (demo)
+        </Button>
+      </div>
+    </div>
   );
 }
 

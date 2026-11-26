@@ -9,6 +9,7 @@ import { AppContextService } from '../applications/app-context.service';
 
 /** Partner-facing events that represent execution steps ARAF must hear about (D-013). */
 export const WEBHOOK_TO_ARAF_REPORT: Partial<Record<string, ArafStatusReportType>> = {
+  'application.equity_confirmed': 'EQUITY_CONFIRMED',
   'financing.booked': 'BOOKING_CONFIRMED',
   'vendor.payment_pending': 'VENDOR_PAYMENT_INITIATED',
   'vendor.payment_confirmed': 'VENDOR_PAYMENT_CONFIRMED',

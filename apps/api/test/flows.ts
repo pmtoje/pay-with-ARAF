@@ -15,7 +15,7 @@ export interface OnboardedPartner {
 let seq = 0;
 
 /** Full partner onboarding through the real APIs (maker-checker, provisioning, invitation, MFA, keys, webhook). */
-export async function onboardPartner(h: Harness, opts: { name: string; webhookUrl?: string; returnOrigin?: string }): Promise<OnboardedPartner> {
+export async function onboardPartner(h: Harness, opts: { name: string; webhookUrl?: string; returnOrigin?: string; equity?: boolean; ratePercent?: number }): Promise<OnboardedPartner> {
   seq++;
   const maker = await staff(h, 'onboarding');
   const checker = await staff(h, 'partner.approver');
@@ -44,7 +44,8 @@ export async function onboardPartner(h: Harness, opts: { name: string; webhookUr
     eligible_categories: ['electronics', 'appliances', 'furniture', 'solar'],
     application_expiry_minutes: 1440,
     order_reservation_minutes: 4320,
-    partial_financing_enabled: false,
+    partial_financing_enabled: opts.equity ?? false,
+    annual_profit_rate_percent: opts.ratePercent ?? 25,
     allow_multiple_vendors: false,
     settlement_arrangement: 'DIRECT_TO_VENDOR',
     return_url_origins: [opts.returnOrigin ?? 'http://localhost:3005'],

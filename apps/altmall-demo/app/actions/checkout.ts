@@ -7,6 +7,7 @@ import { query } from '@/lib/db';
 import { addOrderEvent, createOrder, getOrderForCustomer, startArafCheckout, syncOrderFromAraf, toE164, type OrderLine } from '@/lib/orders';
 import { NG_STATES } from '@/lib/states';
 import { ARAF_OPEN, TERMINAL_NEGATIVE } from '@/lib/statuses';
+import { araf } from '@/lib/araf';
 
 export type PaymentMethod = 'araf' | 'card_demo' | 'transfer_demo';
 
@@ -83,6 +84,35 @@ export async function payAnotherWay(reference: string, method: 'card_demo' | 'tr
   }
   await query(`UPDATE orders SET payment_method = $2, status = 'PAID', updated_at = now() WHERE id = $1`, [order.id, method]);
   await addOrderEvent(order.id, 'PAID', `Paid by ${method === 'card_demo' ? 'card' : 'bank transfer'} (demo)`);
+  revalidatePath(`/orders/${reference}`);
+  return { ok: true };
+}
+
+/**
+ * The shopper pays their equity (down payment) to AltMall — demo payment, nothing is charged.
+ * AltMall then confirms receipt to Pay with ARAF, which only finances the remaining amount.
+ * The amount is always taken from Pay with ARAF's authoritative order view, never from the browser.
+ */
+export async function payEquity(reference: string, method: 'card_demo' | 'transfer_demo'): Promise<{ ok: boolean; message?: string }> {
+  const customer = await currentCustomer();
+  if (!customer) return { ok: false, message: 'Please sign in again.' };
+  if (method !== 'card_demo' && method !== 'transfer_demo') return { ok: false, message: 'Choose a payment method.' };
+  const order = await getOrderForCustomer(reference, customer.id);
+  if (!order || !order.araf_application_reference) return { ok: false, message: 'Order not found.' };
+  const s = await syncOrderFromAraf(order);
+  const equity = s.remote?.application?.equity;
+  if (s.error || !equity) return { ok: false, message: 'We couldn’t confirm your Pay with ARAF status right now. Please try again shortly.' };
+  if (equity.status === 'CONFIRMED') return { ok: true };
+  if (!equity.payable) return { ok: false, message: 'Your equity becomes payable once The Alternative Bank approves your financing.' };
+  const paymentReference = `ALTMALL-EQ-${order.reference.replace(/[^A-Za-z0-9]/g, '')}`.slice(0, 64);
+  await addOrderEvent(order.id, 'EQUITY_PAID', `Equity of ₦${(equity.amount / 100).toLocaleString('en-NG')} received by ${method === 'card_demo' ? 'card' : 'bank transfer'} (demo) · ${paymentReference}`);
+  try {
+    await araf.confirmEquity(order.reference, { amount: equity.amount, payment_reference: paymentReference });
+  } catch (err) {
+    console.warn('[altmall] equity confirmation failed', (err as Error).message);
+    return { ok: false, message: 'We received your payment but couldn’t confirm it with Pay with ARAF yet. Please refresh in a moment.' };
+  }
+  await addOrderEvent(order.id, 'EQUITY_CONFIRMED', 'Equity receipt confirmed to Pay with ARAF');
   revalidatePath(`/orders/${reference}`);
   return { ok: true };
 }

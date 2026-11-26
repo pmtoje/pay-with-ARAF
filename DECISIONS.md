@@ -157,3 +157,27 @@ Nothing is ever reset or dropped by the suites.
 ### D-022 — Product images
 The demo storefront uses original inline SVG illustrations (no third-party images, logos or
 brand names) to avoid licensing issues.
+
+### D-023 — Customer equity reduces the financed base (PROPOSED)
+Requested by the business owner of this build (2026-11-26). The customer may pay equity to the
+merchant; the Bank finances `purchase − equity` and charges profit only on that amount. Equity is
+paid after approval and must be confirmed by the merchant before the Bank pays the vendor. The
+Bank's disclosed acquisition cost in the documents is the financed amount, with the purchase price
+and equity shown alongside. **Open:** Shariah, Legal and Credit Risk sign-off of the equity
+structure (e.g. whether the Bank should acquire the whole asset with the customer's equity applied
+as part-payment), merchant refund obligations if a confirmed-equity application is later cancelled,
+and any minimum equity percentage. Not an approved policy.
+
+### D-024 — Profit priced per annum, per product; 24-month cap (PROPOSED)
+Replaces the earlier 25% / 50% total-markup tiers. Each partner product has its own maker-checker
+approved annual rate (AltMall 25% p.a.); total markup = rate × tenor ÷ 12. The 24-month maximum is
+enforced by the policy schema, partner configuration validation and pricing functions. Earlier
+policy versions are read as their per-annum equivalent so in-flight applications stay readable;
+accepted offers keep the amounts priced at the time. Rates remain PROPOSED until Credit Risk /
+Shariah approve them.
+
+### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
+Business owners are now assessed by the engine: existing obligations plus the proposed instalment
+may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable
+statements or unverified turnover still go to manual review. Affordability is never computed
+without a completed SeedFi credit check. Values are PROPOSED, not approved policy.

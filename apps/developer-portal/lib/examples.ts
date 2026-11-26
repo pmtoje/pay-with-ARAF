@@ -45,6 +45,8 @@ export const APPLICATION_RESPONSE = {
   currency: 'NGN',
   purchase_amount: 45000000,
   customer_contribution: 0,
+  financed_amount: 45000000,
+  equity: { required: false, amount: 0, status: 'NOT_REQUIRED', payable: false },
   vendor_payment: {
     reference: 'PAY-000014',
     status: 'CONFIRMED',
@@ -100,6 +102,7 @@ export const EVENT_DATA: Record<WebhookEventType, Record<string, unknown>> = {
   'application.eligible': { status: 'ELIGIBLE' },
   'application.declined': { status: 'DECLINED' },
   'application.submitted': { status: 'SUBMITTED' },
+  'application.equity_confirmed': { status: 'APPROVED', equity_amount: 200000000, equity_payment_reference: 'ALTMALL-EQ-10045' },
   'application.cancelled': { status: 'CANCELLED' },
   'application.expired': { status: 'EXPIRED' },
   'financing.approved': { status: 'APPROVED' },

@@ -46,6 +46,8 @@ const TEMPLATES: Array<{ code: string; channel: string; audience: string; subjec
   { code: 'ANALYSIS_COMPLETED', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'Your statement review is complete', body: 'We have finished reviewing your statement for application {{reference}}. Return to Pay with ARAF to see your options.' },
   { code: 'APPLICATION_SUBMITTED', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'Financing application received', body: 'Application {{reference}} has been received for review. It is not yet approved. We will update you.' },
   { code: 'FINANCING_APPROVED', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'Financing approved — next steps', body: 'Application {{reference}} has been approved. Please review and sign your financing documents.' },
+  { code: 'EQUITY_PAYABLE', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'Pay your equity to the merchant', body: 'Application {{reference}} is approved. Please pay your agreed equity to the merchant; the Bank finances only the remaining amount.' },
+  { code: 'EQUITY_CONFIRMED', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'Equity received', body: 'The merchant has confirmed receipt of your equity for application {{reference}}.' },
   { code: 'FINANCING_DECLINED', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'Update on your financing application', body: 'We are unable to offer financing for application {{reference}} at this time. You can choose another payment method with the merchant.' },
   { code: 'DOCUMENTATION_REQUIRED', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'Action required: financing documents', body: 'Please review and sign the documents for application {{reference}}.' },
   { code: 'VENDOR_PAYMENT_CONFIRMED', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'We have purchased your item', body: 'The Bank has purchased your item for application {{reference}}. Please review and execute your sale agreement.' },
@@ -94,6 +96,24 @@ async function main() {
     },
   });
   const active = await prisma.creditPolicyVersion.findFirst({ where: { policyId: policy.id, status: 'ACTIVE' } });
+  // Sandbox databases seeded before per-annum product pricing hold a legacy version (25% / 50% total
+  // markup tiers, no equity, business owners always manual). Supersede it with the current PROPOSED rules.
+  if (active && !('defaultAnnualProfitRateBps' in (active.rules as object))) {
+    const last = await prisma.creditPolicyVersion.findFirst({ where: { policyId: policy.id }, orderBy: { version: 'desc' } });
+    await prisma.creditPolicyVersion.update({ where: { id: active.id }, data: { status: 'SUPERSEDED' } });
+    await prisma.creditPolicyVersion.create({
+      data: {
+        policyId: policy.id,
+        version: (last?.version ?? active.version) + 1,
+        status: 'ACTIVE',
+        rules: PROPOSED_SANDBOX_POLICY as object,
+        changeSummary: 'PROPOSED (sandbox): profit priced per annum per product (default 25% p.a.), 24-month maximum tenor, business owners assessed at 10% of monthly turnover, customer equity paid to the merchant reduces the financed amount.',
+        isProposed: true,
+        effectiveFrom: new Date(),
+        approvedAt: new Date(),
+      },
+    });
+  }
   if (!active) {
     await prisma.creditPolicyVersion.create({
       data: {
@@ -101,7 +121,7 @@ async function main() {
         version: 1,
         status: 'ACTIVE',
         rules: PROPOSED_SANDBOX_POLICY as object,
-        changeSummary: 'Initial PROPOSED sandbox policy from the SeedFi SWR (score bands 280–529 / 530–619 / 620–800, 33.3% repayment-to-income, ₦5m single obligor, 25% / 50% total markup).',
+        changeSummary: 'Initial PROPOSED sandbox policy (score bands 280–529 / 530–619 / 620–800, 33.3% of salary / 10% of turnover, ₦5m single obligor, 25% p.a. default product rate, 24-month maximum tenor, customer equity enabled).',
         isProposed: true,
         effectiveFrom: new Date(),
         approvedAt: new Date(),

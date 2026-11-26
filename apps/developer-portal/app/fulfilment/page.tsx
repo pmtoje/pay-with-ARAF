@@ -13,11 +13,29 @@ export default function Fulfilment() {
       eyebrow="Orders & money"
       title="Fulfilment, cancellations & returns"
       lede="Record what happens to the goods after release, and ask the Bank to cancel or reverse an order. All endpoints take your merchant_order_reference and require the orders:write scope."
-      toc={['Record fulfilment', 'Confirm delivery', 'Cancel an order', 'Request a return']}
+      toc={['Confirm customer equity', 'Record fulfilment', 'Confirm delivery', 'Cancel an order', 'Request a return']}
     >
       <Callout tone="info">
         These actions are also available to your staff in the Partner portal (<em>Ready for release</em> and application detail pages). Each step can be recorded once — repeating it returns <code>409 FULFILMENT_DUPLICATE</code>.
       </Callout>
+
+      <H2>Confirm customer equity</H2>
+      <P>
+        If your configuration allows customer equity, a customer may choose to pay part of the price themselves (for example ₦2,000,000 of a ₦5,000,000 item). You collect that equity directly, after the Bank approves the financing (<code>application.equity.payable</code> is <code>true</code>). The Bank finances only the remainder (<code>financed_amount</code>, ₦3,000,000 in the example), charges its profit only on that amount, and pays the vendor only that amount — and only after you confirm the equity.
+      </P>
+      <Endpoint method="POST" path="/api/v1/orders/{merchant_order_reference}/equity" scope="orders:write" />
+      <ParamTable
+        caption="Equity body"
+        params={[
+          { name: 'amount', type: 'integer (kobo)', required: true, description: <>Must equal <code>application.equity.amount</code> exactly; otherwise <code>422 EQUITY_AMOUNT_MISMATCH</code>.</> },
+          { name: 'payment_reference', type: 'string (4–64, A–Z 0–9 . _ -)', required: true, description: 'Your receipt reference. Repeating the same reference is idempotent; a different one after confirmation returns 409 EQUITY_ALREADY_CONFIRMED.' },
+        ]}
+      />
+      <CodeTabs tabs={fetchTabs('POST', '/orders/ORD-10045/equity', { amount: 200000000, payment_reference: 'ALTMALL-EQ-10045' })} />
+      <CodeBlock lang="json" title="200 OK" code={json({ status: 'CONFIRMED', idempotent_replay: false })} />
+      <P>
+        You then receive <code>application.equity_confirmed</code>. Before approval the call returns <code>409 INVALID_STATE</code>; if the customer chose no equity it returns <code>409 EQUITY_NOT_REQUIRED</code>.
+      </P>
 
       <H2>Record fulfilment</H2>
       <Endpoint method="POST" path="/api/v1/orders/{merchant_order_reference}/fulfil" scope="orders:write" />

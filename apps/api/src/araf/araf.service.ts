@@ -79,12 +79,16 @@ export class ArafService {
       altbank_account: { account_number: this.crypto.decrypt(account.accountNumberEncrypted, `acct:${account.customerId}`), account_name: account.accountName, product: account.productName, source: account.source },
       seedfi_assessment: credit ? { reference: credit.providerReference, score: credit.score, band: credit.band, bureau_monthly_obligations_kobo: s(credit.bureauMonthlyObligationsKobo), delinquency_indicators: credit.delinquencyIndicators, assessed_at: credit.assessedAt } : null,
       periculum_analysis: analysis ? { reference: analysis.analysisReference, period: [analysis.periodStart, analysis.periodEnd], average_inflow_kobo: s(analysis.averageMonthlyInflowKobo), recurring_obligations_kobo: s(analysis.recurringObligationsKobo), statement_quality: analysis.statementQuality, stress_indicators: analysis.stressIndicators } : null,
-      affordability: afford ? { recognised_income_kobo: s(afford.recognisedMonthlyIncomeKobo), existing_obligations_kobo: s(afford.existingMonthlyObligationsKobo), capacity_kobo: s(afford.capacityKobo), max_eligible_kobo: s(afford.maxEligibleKobo), remaining_exposure_kobo: s(afford.remainingExposureKobo) } : null,
+      affordability: afford ? { income_basis: afford.incomeProfile, repayment_ceiling: afford.incomeProfile === 'BUSINESS_OWNER' ? 'TOTAL_OBLIGATIONS_MAX_10PCT_OF_MONTHLY_TURNOVER' : 'TOTAL_OBLIGATIONS_MAX_33_3PCT_OF_MONTHLY_SALARY', recognised_income_kobo: s(afford.recognisedMonthlyIncomeKobo), existing_obligations_kobo: s(afford.existingMonthlyObligationsKobo), capacity_kobo: s(afford.capacityKobo), max_eligible_kobo: s(afford.maxEligibleKobo), remaining_exposure_kobo: s(afford.remainingExposureKobo) } : null,
       financing: {
+        purchase_amount_kobo: s(offer.purchaseAmountKobo),
+        // Equity is paid by the customer to the merchant; only the remainder is financed and marked up.
+        customer_equity_kobo: s(offer.contributionKobo),
         requested_amount_kobo: s(offer.financingAmountKobo),
         eligible_amount_kobo: s(app.eligibleAmountKobo),
         contribution_kobo: s(offer.contributionKobo),
         tenor_months: offer.tenorMonths,
+        annual_profit_rate_bps: offer.annualProfitRateBps,
         markup_bps_total: offer.markupBps,
         profit_kobo: s(offer.profitKobo),
         deferred_sale_price_kobo: s(offer.deferredSalePriceKobo),

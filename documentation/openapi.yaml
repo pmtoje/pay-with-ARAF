@@ -91,7 +91,17 @@ components:
         checkout_session_id: { type: string }
         currency: { type: string }
         purchase_amount: { type: integer }
-        customer_contribution: { type: integer }
+        customer_contribution: { type: integer, description: Customer equity in kobo (paid to the merchant; not financed). }
+        financed_amount: { type: integer, description: purchase_amount − customer_contribution. The Bank pays the vendor this amount and charges profit only on it. }
+        equity:
+          type: object
+          properties:
+            required: { type: boolean }
+            amount: { type: integer }
+            status: { enum: [NOT_REQUIRED, DUE_AFTER_APPROVAL, AWAITING_PAYMENT, CONFIRMED] }
+            payable: { type: boolean, description: True once the Bank has approved and until you confirm receipt. }
+            payment_reference: { type: [string, 'null'] }
+            confirmed_at: { type: [string, 'null'], format: date-time }
         vendor_payment:
           type: [object, 'null']
           properties:
@@ -158,6 +168,17 @@ paths:
       description: The ONLY acceptable proof that goods may be released. Never rely on browser redirects or customer screenshots.
       parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
       responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseAuthorization' } } } } }
+  /orders/{reference}/equity:
+    post:
+      summary: Confirm you received the customer's equity (scope orders:write)
+      description: >-
+        The customer pays their agreed equity (down payment) to you after the Bank approves the financing.
+        Confirm receipt here; the amount must equal application.equity.amount exactly. The Bank does not pay
+        the vendor until equity is confirmed, and then pays only financed_amount. Replays with the same
+        payment_reference are idempotent.
+      parameters: [{ name: reference, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, required: [amount, payment_reference], properties: { amount: { type: integer, description: kobo }, payment_reference: { type: string, pattern: '^[A-Za-z0-9._\-]{4,64}$' } } } } } }
+      responses: { '200': { description: 'CONFIRMED' }, '409': { description: EQUITY_NOT_REQUIRED / EQUITY_ALREADY_CONFIRMED / INVALID_STATE (not yet approved, or vendor payment already started) }, '422': { description: EQUITY_AMOUNT_MISMATCH } }
   /orders/{reference}/fulfil:
     post:
       summary: Record preparation / dispatch / collection (scope orders:write)

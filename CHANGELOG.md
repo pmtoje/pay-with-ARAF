@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 — 2026-11-26
+### Added
+- Customer equity (D-023): "Your equity" screen in the hosted checkout; financed = price − equity,
+  profit charged on the financed amount only; `POST /api/checkout/sessions/:id/equity`; merchant
+  confirmation `POST /api/v1/orders/{ref}/equity`; `application.equity_confirmed` webhook; ARAF
+  report `EQUITY_CONFIRMED`; equity in offers, documents, PDFs, partner/admin views; AltMall pays
+  and confirms equity from the order page (demo payment).
+- Per-product annual profit rate (D-024) on the partner configuration (maker-checker), snapshotted
+  onto applications and offers; shown in the policy simulator, admin and partner portals.
+- Business owners assessed at 10% of monthly turnover (D-025); policy simulator supports both bases.
+### Changed
+- Pricing is per annum (default 25% p.a.) with a hard 24-month maximum, replacing 25% / 50% total
+  markup tiers. Affordability requires a completed SeedFi credit check.
+- Migration `20261126090000_equity_and_product_pricing`; seed supersedes legacy policy versions.
+- Tests: 199 passing (110 rules · 36 security · 7 integrations · 46 API).
+
 ## 0.1.1 — 2026-11-25
 ### Added
 - ARAF execution-status reporting (D-013): `ArafWorkflowProvider.reportStatus`, durable ordered

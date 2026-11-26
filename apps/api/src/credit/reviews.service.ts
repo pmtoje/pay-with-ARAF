@@ -251,24 +251,34 @@ export class ReviewsService implements OnModuleInit {
         monthly_obligations_naira: z.number().int().min(0),
         existing_exposure_naira: z.number().int().min(0).default(0),
         cart_naira: z.number().int().positive(),
+        /** Customer equity paid to the merchant; only cart − equity is financed. */
+        equity_naira: z.number().int().min(0).default(0),
+        income_basis: z.enum(['SALARY_EARNER', 'BUSINESS_OWNER']).default('SALARY_EARNER'),
+        annual_profit_rate_percent: z.number().min(0).max(100).optional(),
       })
       .strict()
       .parse(body);
     const policy = input.rules ? parsePolicyRules(input.rules) : PROPOSED_SANDBOX_POLICY;
     const K = (n: number) => BigInt(n) * 100n;
     const credit = input.score === undefined ? null : classifyScore(input.score, policy);
+    const pricing = { annualProfitRateBps: input.annual_profit_rate_percent === undefined ? policy.defaultAnnualProfitRateBps : Math.round(input.annual_profit_rate_percent * 100) };
+    if (input.equity_naira >= input.cart_naira) throw new AppError('VALIDATION_FAILED', { fields: [{ path: 'equity_naira', message: 'Equity must be less than the cart' }] });
+    const toFinance = K(input.cart_naira - input.equity_naira);
     const elig = computeEligibility(
-      { recognisedMonthlyIncome: K(input.monthly_income_naira), existingMonthlyObligations: K(input.monthly_obligations_naira), exposure: { existingBankExposure: K(input.existing_exposure_naira), otherActiveReservations: 0n }, partnerMaxAmount: null },
+      { incomeBasis: input.income_basis, pricing, recognisedMonthlyIncome: K(input.monthly_income_naira), existingMonthlyObligations: K(input.monthly_obligations_naira), exposure: { existingBankExposure: K(input.existing_exposure_naira), otherActiveReservations: 0n }, partnerMaxAmount: null },
       policy,
     );
     return {
       credit,
-      capacity: Number(availableMonthlyCapacity(K(input.monthly_income_naira), K(input.monthly_obligations_naira), policy)),
+      income_basis: input.income_basis,
+      annual_profit_rate_percent: pricing.annualProfitRateBps / 100,
+      financed_amount: Number(toFinance),
+      capacity: Number(availableMonthlyCapacity(K(input.monthly_income_naira), K(input.monthly_obligations_naira), policy, input.income_basis)),
       max_eligible: Number(elig.maxEligibleAmount),
       tenors: elig.tenors.map((t) => {
-        const finance = t.eligibleAmount < K(input.cart_naira) ? t.eligibleAmount : K(input.cart_naira);
-        const p = priceDeferredSale(finance, t.tenorMonths, policy);
-        return { tenor_months: t.tenorMonths, markup_percent: t.markupBps / 100, max_affordable: Number(maxAffordableFinancing(elig.capacity, t.tenorMonths, policy)), eligible: Number(t.eligibleAmount), limiting_factor: t.limitingFactor, financing_for_cart: Number(finance), monthly_repayment: Number(p.monthlyRepayment), deferred_sale_price: Number(p.deferredSalePrice), display: `${formatNaira(finance)} over ${t.tenorMonths}m → ${formatNaira(p.monthlyRepayment)}/month` };
+        const finance = t.eligibleAmount < toFinance ? t.eligibleAmount : toFinance;
+        const p = priceDeferredSale(finance, t.tenorMonths, policy, pricing);
+        return { tenor_months: t.tenorMonths, markup_percent: t.markupBps / 100, max_affordable: Number(maxAffordableFinancing(elig.capacity, t.tenorMonths, policy, pricing)), eligible: Number(t.eligibleAmount), limiting_factor: t.limitingFactor, financing_for_cart: Number(finance), monthly_repayment: Number(p.monthlyRepayment), deferred_sale_price: Number(p.deferredSalePrice), display: `${formatNaira(finance)} over ${t.tenorMonths}m → ${formatNaira(p.monthlyRepayment)}/month` };
       }),
     };
   }

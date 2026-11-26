@@ -14,14 +14,20 @@ interface Rules {
   scoreBands: Array<{ band: string; min: number; max: number; action: string }>;
   thinFileTreatment: string;
   maxRepaymentToIncomeRatio: string;
+  maxRepaymentToTurnoverRatio?: string;
   obligationsSource: string;
   singleObligorLimitKobo: string;
   exposureBasis: string;
   approvedTenorsMonths: number[];
-  markupTiers: Array<{ minTenorMonths: number; maxTenorMonths: number; markupBps: number }>;
+  /** Current versions: profit priced per annum per product, with a default rate and a tenor cap. */
+  defaultAnnualProfitRateBps?: number;
+  maxTenorMonths?: number;
+  /** Legacy versions only: total markup per tenor tier. */
+  markupTiers?: Array<{ minTenorMonths: number; maxTenorMonths: number; markupBps: number }>;
   statementMonths: { SALARY_EARNER: number; BUSINESS_OWNER: number };
   businessOwnerManualReview: boolean;
-  partialFinancingEnabled: boolean;
+  customerEquityEnabled?: boolean;
+  partialFinancingEnabled?: boolean;
   minimumFinancingKobo: string;
   offerValidityMinutes: number;
   assessmentValidityDays: number;
@@ -124,23 +130,40 @@ function RulesView({ v }: { v: Version }) {
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Affordability & exposure</h3>
             <dl>
-              <Row k="Max repayment-to-income" v={`${(Number(r.maxRepaymentToIncomeRatio) * 100).toFixed(1)}%`} />
+              <Row k="Max repayments — salary earners" v={`${(Number(r.maxRepaymentToIncomeRatio) * 100).toFixed(1)}% of monthly salary`} />
+              <Row k="Max repayments — business owners" v={r.maxRepaymentToTurnoverRatio ? `${(Number(r.maxRepaymentToTurnoverRatio) * 100).toFixed(1)}% of monthly turnover` : <span className="text-warning">Manual review (legacy)</span>} />
               <Row k="Obligations source" v={humanize(r.obligationsSource)} />
               <Row k="Single obligor limit" v={formatNaira(Number(r.singleObligorLimitKobo), { noKobo: true })} />
               <Row k="Exposure basis" v={humanize(r.exposureBasis)} />
               <Row k="Minimum financing" v={formatNaira(Number(r.minimumFinancingKobo), { noKobo: true })} />
-              <Row k="Partial financing" v={r.partialFinancingEnabled ? 'Enabled' : <span className="text-warning">Disabled</span>} />
+              <Row k="Customer equity (down payment)" v={(r.customerEquityEnabled ?? r.partialFinancingEnabled) ? 'Enabled — financed = price − equity' : <span className="text-warning">Disabled</span>} />
             </dl>
           </div>
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Tenors & markup (total over tenor)</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Tenors & profit rate</h3>
             <div className="mb-3 flex flex-wrap gap-1.5">{r.approvedTenorsMonths.map((t) => <Badge key={t} tone="gold">{t} months</Badge>)}</div>
-            <div className="rounded-md border border-border">
-              <DataTable caption="Markup tiers" rows={r.markupTiers} rowKey={(t) => `${t.minTenorMonths}`} dense columns={[
-                { key: 't', header: 'Tenor range', cell: (t) => `${t.minTenorMonths}–${t.maxTenorMonths} months` },
-                { key: 'm', header: 'Total markup', align: 'right', cell: (t) => `${(t.markupBps / 100).toFixed(1)}%` },
-              ]} />
-            </div>
+            {r.defaultAnnualProfitRateBps !== undefined ? (
+              <>
+                <dl>
+                  <Row k="Default profit rate" v={`${r.defaultAnnualProfitRateBps / 100}% per annum`} />
+                  <Row k="Maximum tenor" v={`${r.maxTenorMonths} months`} />
+                </dl>
+                <p className="mt-2 text-xs text-muted">Each partner product sets its own approved rate (partner configuration, maker–checker). Total markup = rate × tenor ÷ 12, charged on the financed amount only.</p>
+                <div className="mt-3 rounded-md border border-border">
+                  <DataTable caption="Total markup at the default rate" rows={r.approvedTenorsMonths.map((t) => ({ t, m: (r.defaultAnnualProfitRateBps! * t) / 1200 }))} rowKey={(x) => String(x.t)} dense columns={[
+                    { key: 't', header: 'Tenor', cell: (x) => `${x.t} months` },
+                    { key: 'm', header: 'Total markup', align: 'right', cell: (x) => `${Number(x.m.toFixed(2))}%` },
+                  ]} />
+                </div>
+              </>
+            ) : (
+              <div className="rounded-md border border-border">
+                <DataTable caption="Markup tiers (legacy version)" rows={r.markupTiers ?? []} rowKey={(t) => `${t.minTenorMonths}`} dense columns={[
+                  { key: 't', header: 'Tenor range', cell: (t) => `${t.minTenorMonths}–${t.maxTenorMonths} months` },
+                  { key: 'm', header: 'Total markup', align: 'right', cell: (t) => `${(t.markupBps / 100).toFixed(1)}%` },
+                ]} />
+              </div>
+            )}
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Statements, reviews & validity</h3>
@@ -208,6 +231,9 @@ function Simulator({ versions, defaultId }: { versions: Version[]; defaultId?: s
   const [obligations, setObligations] = useState('50000');
   const [exposure, setExposure] = useState('0');
   const [cart, setCart] = useState('850000');
+  const [equity, setEquity] = useState('0');
+  const [basis, setBasis] = useState<'SALARY_EARNER' | 'BUSINESS_OWNER'>('SALARY_EARNER');
+  const [rate, setRate] = useState('25');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [result, setResult] = useState<SimResult | null>(null);
@@ -225,6 +251,9 @@ function Simulator({ versions, defaultId }: { versions: Version[]; defaultId?: s
         monthly_obligations_naira: toInt(obligations) ?? 0,
         existing_exposure_naira: toInt(exposure) ?? 0,
         cart_naira: toInt(cart) ?? 0,
+        equity_naira: toInt(equity) ?? 0,
+        income_basis: basis,
+        annual_profit_rate_percent: Number(rate) || 0,
       }));
     } catch (err) {
       setError(err);
@@ -243,10 +272,15 @@ function Simulator({ versions, defaultId }: { versions: Version[]; defaultId?: s
           <Field label="Credit score">{(ids) => <Input id={ids.id} inputMode="numeric" value={score} disabled={noScore} onChange={(e) => setScore(e.target.value)} />}</Field>
           <Checkbox checked={noScore} onChange={(e) => setNoScore(e.target.checked)} label="No score (thin file)" />
         </div>
-        <Field label="Monthly income (₦)">{(ids) => <Input id={ids.id} inputMode="numeric" value={income} onChange={(e) => setIncome(e.target.value)} />}</Field>
+        <Field label="Applicant type">
+          {(ids) => <Select id={ids.id} value={basis} onChange={(e) => setBasis(e.target.value as 'SALARY_EARNER' | 'BUSINESS_OWNER')}><option value="SALARY_EARNER">Salary earner (33.3% of salary)</option><option value="BUSINESS_OWNER">Business owner (10% of turnover)</option></Select>}
+        </Field>
+        <Field label={basis === 'BUSINESS_OWNER' ? 'Monthly turnover (₦)' : 'Monthly salary (₦)'}>{(ids) => <Input id={ids.id} inputMode="numeric" value={income} onChange={(e) => setIncome(e.target.value)} />}</Field>
         <Field label="Monthly obligations (₦)">{(ids) => <Input id={ids.id} inputMode="numeric" value={obligations} onChange={(e) => setObligations(e.target.value)} />}</Field>
         <Field label="Existing Bank exposure (₦)">{(ids) => <Input id={ids.id} inputMode="numeric" value={exposure} onChange={(e) => setExposure(e.target.value)} />}</Field>
         <Field label="Cart value (₦)">{(ids) => <Input id={ids.id} inputMode="numeric" value={cart} onChange={(e) => setCart(e.target.value)} />}</Field>
+        <Field label="Customer equity (₦)" hint="Paid to the merchant; only cart − equity is financed.">{(ids) => <Input id={ids.id} aria-describedby={ids.describedBy} inputMode="numeric" value={equity} onChange={(e) => setEquity(e.target.value)} />}</Field>
+        <Field label="Product profit rate (% p.a.)">{(ids) => <Input id={ids.id} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} />}</Field>
         <div className="flex items-end sm:col-span-2 lg:col-span-3"><Button type="submit" loading={busy}>Run simulation</Button></div>
       </form>
       <div aria-live="polite" className="mt-5 space-y-5">

@@ -194,7 +194,8 @@ function OverviewTab({ data, sandbox }: { data: Integration; sandbox: boolean })
                 { label: 'Eligible categories', value: <span className="flex flex-wrap gap-1">{c.eligible_categories.map((cat) => <Badge key={cat}><span className="font-mono">{cat}</span></Badge>)}</span> },
                 { label: 'Application expiry', value: `${c.application_expiry_minutes / 60} hours` },
                 { label: 'Order reservation', value: `${c.order_reservation_minutes / 60} hours` },
-                { label: 'Partial financing', value: c.partial_financing_enabled ? 'Enabled' : 'Disabled' },
+                { label: 'Profit rate', value: c.annual_profit_rate_percent !== undefined ? `${c.annual_profit_rate_percent}% per annum` : '—' },
+                { label: 'Customer equity', value: c.partial_financing_enabled ? 'Enabled — you collect it, then confirm via POST /orders/{ref}/equity' : 'Disabled' },
                 { label: 'Multiple vendors per cart', value: c.allow_multiple_vendors ? 'Allowed' : 'Not allowed' },
                 { label: 'Settlement arrangement', value: humanize(c.settlement_arrangement) },
               ]}

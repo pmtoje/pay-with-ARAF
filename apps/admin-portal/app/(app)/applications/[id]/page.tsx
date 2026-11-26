@@ -118,7 +118,9 @@ function Summary({ a }: { a: AppDetail }) {
               { label: 'Purchase', value: formatNaira(a.amounts.purchase) },
               { label: 'Eligible (indicative)', value: a.amounts.eligible === undefined ? <span className="text-subtle">Restricted</span> : formatNaira(a.amounts.eligible) },
               { label: 'Financing', value: formatNaira(a.amounts.financing) },
-              { label: 'Customer contribution', value: formatNaira(a.amounts.contribution) },
+              { label: 'Customer equity (to merchant)', value: formatNaira(a.amounts.contribution) },
+              { label: 'Equity status', value: a.equity?.required ? `${humanize(a.equity.status)}${a.equity.payment_reference ? ` · ${a.equity.payment_reference}` : ''}` : 'Not required' },
+              { label: 'Product profit rate', value: a.annual_profit_rate_percent !== undefined ? `${a.annual_profit_rate_percent}% p.a.` : '—' },
               { label: 'Income profile', value: a.income_profile ? humanize(a.income_profile) : '—' },
               { label: 'Environment', value: humanize(a.environment) },
             ]}

@@ -1,9 +1,9 @@
-import { Alert, Timeline, formatDateTime } from '@araf/ui';
+import { Alert, Timeline, formatDateTime, formatNaira } from '@araf/ui';
 import { cn } from '@/lib/cn';
 import { syncOrderFromAraf, type OrderRow } from '@/lib/orders';
 import { ARAF_OPEN, MILESTONES, PAYMENT_METHOD_LABEL, SHOPPER_ACTION, TERMINAL_NEGATIVE, milestoneIndex, statusCopy } from '@/lib/statuses';
 import { PayWithArafMark } from '@/components/brand';
-import { AutoRefresh, PayAnotherWay, RefreshButton, RetryAraf } from './OrderActions';
+import { AutoRefresh, PayAnotherWay, PayEquity, RefreshButton, RetryAraf } from './OrderActions';
 
 const toneBox: Record<string, string> = {
   gold: 'border-gold/40 bg-gold-soft/40',
@@ -23,6 +23,7 @@ export async function ArafStatusPanel({ order: initial, fromAraf }: { order: Ord
   const idx = milestoneIndex(status);
   const timeline = remote?.application?.timeline ?? [];
   const fulfilment = remote?.application?.fulfilment ?? [];
+  const equity = remote?.application?.equity;
   const pollable = !paidElsewhere && !!status && (ARAF_OPEN.includes(status) || status === 'READY_FOR_RELEASE' || status === 'DISPATCHED');
 
   return (
@@ -69,6 +70,27 @@ export async function ArafStatusPanel({ order: initial, fromAraf }: { order: Ord
             <p className="mt-2 text-sm text-warning">Pay with ARAF couldn’t be started for this order.</p>
           )}
         </div>
+
+        {!paidElsewhere && !terminal && equity?.required && (
+          <div className={cn('rounded-lg border p-5', toneBox[equity.status === 'CONFIRMED' ? 'success' : equity.payable ? 'gold' : 'neutral'])}>
+            <h3 className="text-base font-semibold text-fg">Your equity: {formatNaira(equity.amount)}</h3>
+            <dl className="mt-2 grid grid-cols-1 gap-1 text-sm sm:grid-cols-3">
+              <div><dt className="text-subtle">Item price</dt><dd className="font-medium tabular-nums text-fg">{formatNaira(remote!.application!.purchase_amount)}</dd></div>
+              <div><dt className="text-subtle">Your equity to AltMall</dt><dd className="font-medium tabular-nums text-fg">{formatNaira(equity.amount)}</dd></div>
+              <div><dt className="text-subtle">Financed by the Bank</dt><dd className="font-medium tabular-nums text-fg">{formatNaira(remote!.application!.financed_amount)}</dd></div>
+            </dl>
+            {equity.status === 'CONFIRMED' ? (
+              <p className="mt-2 text-sm text-muted">Received{equity.payment_reference ? ` · ${equity.payment_reference}` : ''}{equity.confirmed_at ? ` · ${formatDateTime(equity.confirmed_at)}` : ''}. Pay with ARAF will now pay the vendor the financed amount.</p>
+            ) : equity.payable ? (
+              <>
+                <p className="mt-2 text-sm text-muted">Your financing is approved. Pay your equity to AltMall so The Alternative Bank can pay the vendor the remaining amount.</p>
+                <PayEquity reference={order.reference} amountLabel={formatNaira(equity.amount)} />
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-muted">You’ll pay this to AltMall once The Alternative Bank approves your financing. Nothing is due yet.</p>
+            )}
+          </div>
+        )}
 
         {!paidElsewhere && !order.cancel_reason && (terminal || (!status && order.status === 'FINANCING_FAILED')) && (
           <div className="space-y-4">

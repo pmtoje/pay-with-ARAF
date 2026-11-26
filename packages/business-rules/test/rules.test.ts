@@ -17,7 +17,9 @@ import {
   formatNaira,
   isOfferAffordable,
   isWithinRatio,
-  markupBpsForTenor,
+  totalMarkupBps,
+  equityBounds,
+  validateEquity,
   maxAffordableFinancing,
   parseDecimal,
   parsePolicyRules,
@@ -29,11 +31,14 @@ import {
   APPLICATION_STATES,
   PRE_RELEASE_CONDITIONS,
   UnsupportedTenorError,
+  InvalidProfitRateError,
   type ReleaseGateInput,
   type StatementCredit,
 } from '../src';
 
 const N = (naira: number) => BigInt(naira) * 100n; // naira → kobo
+/** AltMall's product rate: 25% per annum. */
+const R = { annualProfitRateBps: 2500 };
 
 describe('credit score classification (spec §64)', () => {
   it.each([
@@ -77,8 +82,20 @@ describe('policy validation', () => {
     const bad = { ...P, scoreBands: [P.scoreBands[0], P.scoreBands[2]] };
     expect(() => parsePolicyRules(bad)).toThrow(/contiguous/);
   });
-  it('rejects approved tenors with no markup tier', () => {
-    expect(() => parsePolicyRules({ ...P, approvedTenorsMonths: [12, 36] })).toThrow(/no markup tier/);
+  it('rejects approved tenors above the maximum tenor', () => {
+    expect(() => parsePolicyRules({ ...P, approvedTenorsMonths: [12, 36] })).toThrow(/exceeds the maximum tenor/);
+  });
+  it('never allows a maximum tenor above 24 months', () => {
+    expect(() => parsePolicyRules({ ...P, maxTenorMonths: 25 })).toThrow();
+  });
+  it('reads legacy policy versions (total-markup tiers) as the equivalent per-annum rules', () => {
+    const { maxTenorMonths: _m, defaultAnnualProfitRateBps: _d, maxRepaymentToTurnoverRatio: _t, customerEquityEnabled: _e, ...rest } = P;
+    const legacy = { ...rest, partialFinancingEnabled: false, markupTiers: [{ minTenorMonths: 1, maxTenorMonths: 12, markupBps: 2500 }, { minTenorMonths: 13, maxTenorMonths: 24, markupBps: 5000 }] };
+    const r = parsePolicyRules(legacy);
+    expect(r.defaultAnnualProfitRateBps).toBe(2500);
+    expect(r.maxTenorMonths).toBe(24);
+    expect(r.maxRepaymentToTurnoverRatio).toBe('0.10');
+    expect(r.customerEquityEnabled).toBe(false);
   });
 });
 
@@ -115,25 +132,39 @@ describe('available capacity', () => {
   });
 });
 
-describe('markup and tenor (spec §28, §64)', () => {
-  it('12 months = 25% total markup', () => expect(markupBpsForTenor(12, P)).toBe(2500));
-  it('13 months = 50% total markup', () => expect(markupBpsForTenor(13, P)).toBe(5000));
-  it('24 months = 50% total markup', () => expect(markupBpsForTenor(24, P)).toBe(5000));
-  it('25 months is unsupported under the initial policy', () => {
-    expect(() => markupBpsForTenor(25, P)).toThrow(UnsupportedTenorError);
+describe('per-annum product pricing and tenor', () => {
+  it('25% p.a. → 12 months = 25% total markup', () => expect(totalMarkupBps(12, P, R)).toBe(2500));
+  it('25% p.a. → 24 months = 50% total markup', () => expect(totalMarkupBps(24, P, R)).toBe(5000));
+  it('25% p.a. → 6 months = 12.5% total markup', () => expect(totalMarkupBps(6, P, R)).toBe(1250));
+  it('25% p.a. → 18 months = 37.5% total markup', () => expect(totalMarkupBps(18, P, R)).toBe(3750));
+  it('the rate is per product: 20% p.a. for 12 months = 20%', () => expect(totalMarkupBps(12, P, { annualProfitRateBps: 2000 })).toBe(2000));
+  it('25 months is never supported (24-month maximum)', () => {
+    expect(() => totalMarkupBps(25, P, R)).toThrow(UnsupportedTenorError);
+    expect(() => priceDeferredSale(N(100_000), 25, P, R)).toThrow(UnsupportedTenorError);
   });
   it('rejects zero / fractional tenors', () => {
-    expect(() => markupBpsForTenor(0, P)).toThrow(UnsupportedTenorError);
-    expect(() => markupBpsForTenor(1.5, P)).toThrow(UnsupportedTenorError);
+    expect(() => totalMarkupBps(0, P, R)).toThrow(UnsupportedTenorError);
+    expect(() => totalMarkupBps(1.5, P, R)).toThrow(UnsupportedTenorError);
   });
-  it('prices a deferred sale exactly: DSP = F × 1.25 for 12 months', () => {
-    const p = priceDeferredSale(N(450_000), 12, P);
+  it('rejects invalid product rates', () => {
+    expect(() => totalMarkupBps(12, P, { annualProfitRateBps: -1 })).toThrow(InvalidProfitRateError);
+    expect(() => totalMarkupBps(12, P, { annualProfitRateBps: 25.5 })).toThrow(InvalidProfitRateError);
+  });
+  it('prices a deferred sale exactly: DSP = F × 1.25 for 12 months at 25% p.a.', () => {
+    const p = priceDeferredSale(N(450_000), 12, P, R);
     expect(p.deferredSalePrice).toBe(N(562_500));
     expect(p.profitAmount).toBe(N(112_500));
     expect(p.monthlyRepayment).toBe(N(46_875));
+    expect(p.annualProfitRateBps).toBe(2500);
   });
-  it('prices a deferred sale exactly: DSP = F × 1.50 for 18 months', () => {
-    expect(priceDeferredSale(N(1_000_000), 18, P).deferredSalePrice).toBe(N(1_500_000));
+  it('prices 18 months at 25% p.a.: DSP = F × 1.375', () => {
+    expect(priceDeferredSale(N(1_000_000), 18, P, R).deferredSalePrice).toBe(N(1_375_000));
+  });
+  it('prices 24 months at 25% p.a.: DSP = F × 1.50', () => {
+    expect(priceDeferredSale(N(1_000_000), 24, P, R).deferredSalePrice).toBe(N(1_500_000));
+  });
+  it('a different product rate prices differently (22% p.a., 9 months = 16.5%)', () => {
+    expect(priceDeferredSale(N(1_000_000), 9, P, { annualProfitRateBps: 2200 }).profitAmount).toBe(N(165_000));
   });
   it('schedule reconciles exactly to DSP with a final-instalment adjustment', () => {
     for (const [f, t] of [
@@ -143,7 +174,7 @@ describe('markup and tenor (spec §28, §64)', () => {
       [7n, 3],
       [45_000_000n, 6],
     ] as const) {
-      const p = priceDeferredSale(f, t, P);
+      const p = priceDeferredSale(f, t, P, R);
       const sum = p.instalments.reduce((s, i) => s + i.amount, 0n);
       expect(sum).toBe(p.deferredSalePrice);
       expect(p.instalments).toHaveLength(t);
@@ -160,18 +191,18 @@ describe('markup and tenor (spec §28, §64)', () => {
 
 describe('maximum affordable financing', () => {
   it('matches the specification example (₦1,054,464 for 12 months)', () => {
-    expect(maxAffordableFinancing(N(109_840), 12, P)).toBe(N(1_054_464));
+    expect(maxAffordableFinancing(N(109_840), 12, P, R)).toBe(N(1_054_464));
   });
   it('the result never produces an instalment above capacity, and +1 kobo would', () => {
     for (const cap of [1n, 99n, 12_345n, 10_984_000n, 7_777_777n]) {
       for (const t of P.approvedTenorsMonths) {
-        const max = maxAffordableFinancing(cap, t, P);
-        expect(priceDeferredSale(max, t, P).maxInstalment <= cap).toBe(true);
-        if (cap > 1000n) expect(priceDeferredSale(max + 1n, t, P).maxInstalment > cap).toBe(true);
+        const max = maxAffordableFinancing(cap, t, P, R);
+        expect(priceDeferredSale(max, t, P, R).maxInstalment <= cap).toBe(true);
+        if (cap > 1000n) expect(priceDeferredSale(max + 1n, t, P, R).maxInstalment > cap).toBe(true);
       }
     }
   });
-  it('zero capacity gives zero', () => expect(maxAffordableFinancing(0n, 12, P)).toBe(0n));
+  it('zero capacity gives zero', () => expect(maxAffordableFinancing(0n, 12, P, R)).toBe(0n));
 });
 
 describe('single obligor exposure (spec §27, §64)', () => {
@@ -195,6 +226,8 @@ describe('single obligor exposure (spec §27, §64)', () => {
         existingMonthlyObligations: 0n,
         exposure: { existingBankExposure: N(4_800_000), otherActiveReservations: 0n },
         partnerMaxAmount: null,
+        incomeBasis: 'SALARY_EARNER',
+        pricing: R,
       },
       P,
     );
@@ -203,14 +236,14 @@ describe('single obligor exposure (spec §27, §64)', () => {
   });
   it('offer affordable exactly at remaining exposure and not 1 kobo above', () => {
     const cap = N(1_000_000);
-    expect(isOfferAffordable(N(200_000), 12, cap, N(200_000), P)).toBe(true);
-    expect(isOfferAffordable(N(200_000) + 1n, 12, cap, N(200_000), P)).toBe(false);
+    expect(isOfferAffordable(N(200_000), 12, cap, N(200_000), P, R)).toBe(true);
+    expect(isOfferAffordable(N(200_000) + 1n, 12, cap, N(200_000), P, R)).toBe(false);
   });
   it('supports deferred-sale-price exposure basis', () => {
-    expect(exposureAmountFor(N(100_000), 12, { ...P, exposureBasis: 'DEFERRED_SALE_PRICE' })).toBe(N(125_000));
+    expect(exposureAmountFor(N(100_000), 12, { ...P, exposureBasis: 'DEFERRED_SALE_PRICE' }, R)).toBe(N(125_000));
   });
   it('unapproved tenors are never affordable', () => {
-    expect(isOfferAffordable(N(1), 7, N(1_000_000), N(1_000_000), P)).toBe(false);
+    expect(isOfferAffordable(N(1), 7, N(1_000_000), N(1_000_000), P, R)).toBe(false);
   });
 });
 
@@ -317,18 +350,72 @@ describe('cart validation and comparison (spec §12, §29)', () => {
   it('Scenario B: eligible equals cart → full financing', () => {
     expect(compareEligibilityToCart(N(450_000), N(450_000), false, N(20_000)).outcome).toBe('FULL_FINANCING');
   });
-  it('Scenario C (partial enabled): contribution of the shortfall', () => {
+  it('Scenario C (equity enabled): customer equity covers the shortfall', () => {
     expect(compareEligibilityToCart(N(300_000), N(450_000), true, N(20_000))).toEqual({
-      outcome: 'PARTIAL_FINANCING',
+      outcome: 'EQUITY_REQUIRED',
       financingAmount: N(300_000),
       contributionAmount: N(150_000),
     });
   });
-  it('Scenario C (partial disabled, default): cart revision required', () => {
+  it('Scenario C (equity disabled): cart revision required', () => {
     expect(compareEligibilityToCart(N(300_000), N(450_000), false, N(20_000))).toMatchObject({ outcome: 'CART_REVISION_REQUIRED', shortfall: N(150_000) });
   });
   it('Scenario D: zero eligibility declines', () => {
     expect(compareEligibilityToCart(0n, N(450_000), true, N(20_000))).toEqual({ outcome: 'DECLINED', reason: 'NO_ELIGIBILITY' });
+  });
+});
+
+describe('customer equity (down payment to the merchant)', () => {
+  it('₦5m item with ₦2m equity: the Bank finances ₦3m and the markup is on ₦3m only', () => {
+    const financed = N(5_000_000) - N(2_000_000);
+    const p = priceDeferredSale(financed, 12, P, R);
+    expect(p.financingAmount).toBe(N(3_000_000));
+    expect(p.profitAmount).toBe(N(750_000)); // 25% of ₦3m, not of ₦5m
+    expect(p.deferredSalePrice).toBe(N(3_750_000));
+  });
+  it('equity is optional when the customer is eligible for the full price', () => {
+    const b = equityBounds(N(5_000_000), N(6_000_000), N(20_000), true);
+    expect(b).toEqual({ minEquity: 0n, maxEquity: N(4_980_000), available: true });
+    expect(validateEquity(0n, b, true)).toBeNull();
+    expect(validateEquity(N(2_000_000), b, true)).toBeNull();
+  });
+  it('equity must at least cover the eligibility shortfall', () => {
+    const b = equityBounds(N(5_000_000), N(3_000_000), N(20_000), true);
+    expect(b.minEquity).toBe(N(2_000_000));
+    expect(validateEquity(N(1_999_999), b, true)).toBe('EQUITY_BELOW_MINIMUM');
+    expect(validateEquity(N(2_000_000), b, true)).toBeNull();
+  });
+  it('the financed remainder must meet the minimum financing amount', () => {
+    const b = equityBounds(N(5_000_000), N(6_000_000), N(20_000), true);
+    expect(validateEquity(N(4_980_000), b, true)).toBeNull();
+    expect(validateEquity(N(4_980_000) + 1n, b, true)).toBe('EQUITY_ABOVE_MAXIMUM');
+    expect(validateEquity(-1n, b, true)).toBe('EQUITY_NEGATIVE');
+  });
+  it('equity cannot be taken when disabled', () => {
+    const b = equityBounds(N(5_000_000), N(6_000_000), N(20_000), false);
+    expect(validateEquity(N(1), b, false)).toBe('EQUITY_DISABLED');
+    expect(validateEquity(0n, b, false)).toBeNull();
+  });
+});
+
+describe('business owners: 10% of turnover', () => {
+  it('capacity is 10% of average monthly turnover less existing obligations', () => {
+    expect(availableMonthlyCapacity(N(2_000_000), N(50_000), P, 'BUSINESS_OWNER')).toBe(N(150_000));
+  });
+  it('10.000% is within the ceiling, 10.001% is not', () => {
+    expect(isWithinRatio(N(100_000), N(1_000_000), P, 'BUSINESS_OWNER')).toBe(true);
+    expect(isWithinRatio(N(100_000) + 10n, N(1_000_000), P, 'BUSINESS_OWNER')).toBe(false);
+  });
+  it('salary earners keep the 33.3% ceiling', () => {
+    expect(availableMonthlyCapacity(N(2_000_000), 0n, P, 'SALARY_EARNER')).toBe(N(666_000));
+  });
+  it('eligibility for a business owner never produces a repayment above 10% of turnover', () => {
+    const r = computeEligibility(
+      { recognisedMonthlyIncome: N(1_500_000), existingMonthlyObligations: 0n, exposure: { existingBankExposure: 0n, otherActiveReservations: 0n }, partnerMaxAmount: null, incomeBasis: 'BUSINESS_OWNER', pricing: R },
+      P,
+    );
+    expect(r.capacity).toBe(N(150_000));
+    for (const t of r.tenors) expect(priceDeferredSale(t.maxAffordable, t.tenorMonths, P, R).maxInstalment <= N(150_000)).toBe(true);
   });
 });
 

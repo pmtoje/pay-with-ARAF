@@ -43,6 +43,14 @@ dead-letter; manual retry via API/portal; endpoints suspended after 25 consecuti
 Process idempotently by `event_id`; ignore events with a lower `resource_version` than you
 have stored. Event catalogue: `packages/types/src/events.ts`.
 
+## Customer equity
+`POST /api/v1/orders/{ref}/equity {"amount": <kobo>, "payment_reference": "…"}` (scope
+`orders:write`) confirms the merchant received the customer's equity. Allowed once the Bank has
+approved and before the vendor payment; amount must match exactly (`EQUITY_AMOUNT_MISMATCH`);
+idempotent on the same reference (`EQUITY_ALREADY_CONFIRMED` otherwise). Application responses carry
+`customer_contribution`, `financed_amount` and `equity {required, amount, status, payable,
+payment_reference, confirmed_at}`. Event: `application.equity_confirmed`.
+
 ## Outbound reports to ARAF (internal)
 Pay with ARAF executes booking and vendor payment (D-013) and reports each outcome to ARAF through
 `ArafWorkflowProvider.reportStatus`: `{ eventId, arafReference, applicationReference, type, sequence,

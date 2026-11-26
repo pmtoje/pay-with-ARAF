@@ -13,7 +13,7 @@ import { ProvidersService } from '../common/providers.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { PartnersService } from '../partners/partners.service';
 import { OperationsService } from '../operations/operations.service';
-import { n } from '../applications/presenters';
+import { equityView, n } from '../applications/presenters';
 import { ArafReportingService } from '../araf/araf-reporting.service';
 
 @Injectable()
@@ -132,6 +132,8 @@ export class AdminService implements OnModuleInit {
       partner: { id: partner.id, name: partner.tradingName, code: partner.partnerCode },
       order: { reference: order.merchantOrderReference, status: order.status, amount: n(order.amountKobo), items: items.map((i) => ({ sku: i.sku, name: i.name, quantity: i.quantity, unit_amount: n(i.unitAmountKobo), line_amount: n(i.lineAmountKobo), category: i.category })) },
       amounts: { purchase: n(app.purchaseAmountKobo), eligible: sensitive ? n(app.eligibleAmountKobo) : undefined, financing: n(app.financingAmountKobo), contribution: n(app.contributionAmountKobo) },
+      equity: { ...equityView(app) },
+      annual_profit_rate_percent: app.annualProfitRateBps / 100,
       income_profile: app.incomeProfile,
       customer: customer ? { name: `${customer.firstName} ${customer.lastName}`, bvn: `•••••••${customer.bvnLast4}`, phone: customer.phoneMasked } : null,
       account: account ? { number: account.accountNumberMasked, name: account.accountName, product: account.productName, source: account.source } : null,
@@ -141,7 +143,7 @@ export class AdminService implements OnModuleInit {
       affordability: sensitive ? afford.map((a) => ({ outcome: a.outcome, reasons: a.reasons, income: n(a.recognisedMonthlyIncomeKobo), obligations: n(a.existingMonthlyObligationsKobo), capacity: n(a.capacityKobo), existing_exposure: n(a.existingExposureKobo), remaining_exposure: n(a.remainingExposureKobo), max_eligible: n(a.maxEligibleKobo), tenors: a.tenorBreakdown, months: a.monthBreakdown, policy_version_id: a.policyVersionId, at: a.createdAt })) : undefined,
       statement_connections: connections.map((c) => ({ channel: c.channel, status: c.status, findings: c.validationFindings, ownership: sensitive ? c.ownershipConfidence : undefined, period: [c.periodStart, c.periodEnd], at: c.createdAt })),
       documents_stored: storedDocs.map((d) => ({ id: d.id, kind: d.kind, filename: d.filename, size: d.sizeBytes, scan: d.scanStatus })),
-      offers: offers.map((o) => ({ reference: o.reference, status: o.status, tenor: o.tenorMonths, financing: n(o.financingAmountKobo), profit: n(o.profitKobo), dsp: n(o.deferredSalePriceKobo), monthly: n(o.monthlyRepaymentKobo), markup_bps: o.markupBps, expires_at: o.expiresAt, policy_version_id: o.policyVersionId })),
+      offers: offers.map((o) => ({ reference: o.reference, status: o.status, tenor: o.tenorMonths, financing: n(o.financingAmountKobo), profit: n(o.profitKobo), dsp: n(o.deferredSalePriceKobo), monthly: n(o.monthlyRepaymentKobo), markup_bps: o.markupBps, annual_profit_rate_percent: o.annualProfitRateBps / 100, contribution: n(o.contributionKobo), expires_at: o.expiresAt, policy_version_id: o.policyVersionId })),
       araf: araf ? { status: araf.status, reference: araf.arafReference, attempts: araf.attempts, last_error: araf.lastError, events: arafEvents.map((e) => ({ stage: e.stage, sequence: e.sequence, outcome: e.outcome, note: e.note, actor: e.actorName, at: e.occurredAt })), outbound_reports: await this.arafReports.forApplication(id) } : null,
       conditions: conds.map((c) => ({ code: c.code, description: c.description, status: c.status, evidence: c.evidenceRef, satisfied_at: c.satisfiedAt })),
       financing_documents: docs.map((d) => ({ id: d.id, type: d.docType, version: d.version, status: d.status, signed_at: d.signedAt })),

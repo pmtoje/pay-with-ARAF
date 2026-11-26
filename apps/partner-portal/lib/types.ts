@@ -65,6 +65,8 @@ export interface ApplicationDetail {
   currency: string;
   purchase_amount: number | null;
   customer_contribution: number | null;
+  equity?: { required: boolean; amount: number; status: string; payable: boolean; payment_reference?: string | null; confirmed_at?: string | null };
+  financed_amount?: number | null;
   vendor_payment: { reference: string; status: string; amount: number | null; confirmed_at: string | null; simulated: boolean } | null;
   release: { reference?: string; status?: string; authorized: boolean; authorized_at?: string | null };
   timeline: Array<{ status: string; at: string }>;
@@ -175,6 +177,7 @@ export interface Integration {
     application_expiry_minutes: number;
     order_reservation_minutes: number;
     partial_financing_enabled: boolean;
+    annual_profit_rate_percent?: number;
     allow_multiple_vendors: boolean;
     settlement_arrangement: string;
     sandbox_enabled: boolean;

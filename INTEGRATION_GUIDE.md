@@ -19,13 +19,17 @@
    returns `release_authorized: true` with status `AUTHORIZED`. Eligibility, approval, booking and
    payment initiation are **not** release authorisations. If you receive `goods.release_suspended`,
    stop.
-7. **Fulfil.** `POST /orders/{ref}/fulfil {status:"DISPATCHED", tracking_reference, carrier}`, then
+7. **Customer equity (if enabled for you).** A customer may pay part of the price to you as equity;
+   the Bank finances only the rest. When `application.equity.payable` is true (after approval),
+   collect the equity, then call `POST /orders/{ref}/equity {amount, payment_reference}` with the
+   exact amount. The Bank pays the vendor only `financed_amount`, and only after this confirmation.
+8. **Fulfil.** `POST /orders/{ref}/fulfil {status:"DISPATCHED", tracking_reference, carrier}`, then
    `POST /orders/{ref}/deliver`. Duplicates are rejected.
-8. **Changes.** Cancel before payment with `/cancel`; after a payment instruction exists the same call
+9. **Changes.** Cancel before payment with `/cancel`; after a payment instruction exists the same call
    opens a controlled reversal. Returns via `/return`. Refunds flow vendor → Bank, never to the
    customer's account.
-9. **Cart changes.** If the customer is eligible for less than the cart, they return to you; create
-   a new session for the same order with `revises_session_id`.
+10. **Cart changes.** If the customer is eligible for less than the cart and equity is not enabled,
+   they return to you; create a new session for the same order with `revises_session_id`.
 
 Reference implementation: `apps/altmall-demo` (server-side session creation, raw-body webhook
 verification, idempotent processing, release verification, vendor console).

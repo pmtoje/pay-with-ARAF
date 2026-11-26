@@ -47,9 +47,22 @@ BVN-linked phone; possession of BVN + DOB is not sufficient.
   statements, incomplete coverage or uncertain classification → **review**, never auto-decline.
 
 ## Affordability (`computeEligibility`)
+Both checks are mandatory inputs before any affordability decision: the **SeedFi credit check**
+(score band + bureau obligations) and the **Periculum statement analysis** (all three statement
+channels — AltBank, Mono, PDF — go through Periculum). If no completed credit check is on file the
+application goes to manual review; affordability is never computed on a missing check.
+
+| Applicant | Income basis (from Periculum + Bank rules) | Ceiling on total monthly repayments (proposed) |
+| --- | --- | --- |
+| Salary earner | lowest verified monthly salary (6 months) | **33.3%** of salary |
+| Business owner | average monthly turnover (12 months) | **10%** of turnover |
+
+"Total monthly repayments" = existing obligations **plus** the proposed Pay with ARAF instalment.
+Business owners are assessed automatically; an unreliable statement or unverified turnover routes
+to manual review (`businessOwnerManualReview` can still force review for every business owner).
 ```
 Existing obligations   = policy.obligationsSource (default MAX(bureau, statement))
-Capacity               = MAX(0, floor(income × 0.333) − existing obligations)
+Capacity               = MAX(0, floor(income × ceiling) − existing obligations)
 Max affordable (tenor) = largest F with ceil(DSP(F) / tenor) ≤ capacity   (exact search)
 Remaining exposure     = MAX(0, ₦5,000,000 − existing Bank exposure − other active reservations)
 Eligible (tenor)       = MIN(max affordable, exposure cap, partner max)
@@ -57,25 +70,54 @@ Max eligible           = best eligible amount across permitted tenors
 ```
 Spec example: salary ₦480,000, obligations ₦50,000 → capacity ₦109,840 → 12-month max
 ₦1,054,464 (verified end-to-end through the simulator, Periculum stand-in and API).
-Ratio boundaries: 33.299% within · 33.300% within · 33.301% above. Zero/negative income → no capacity.
+Ratio boundaries: 33.299% within · 33.300% within · 33.301% above (salary); 10.000% within ·
+10.001% above (turnover). Zero/negative income → no capacity.
 
 ## Pricing (Murabaha, `priceDeferredSale`)
-| Tenor | Total markup |
+The profit rate is quoted **per annum** and set **per product** — each partner's Pay with ARAF
+product carries its own maker-checker approved rate (`annual_profit_rate_percent` on the partner
+configuration; AltMall: **25% p.a.**). The rate is snapshotted onto the application at checkout
+and onto every offer, so later changes never affect in-flight applications or accepted offers.
+**Maximum tenor: 24 months** (hard cap; the policy and partner configuration cannot exceed it).
+
+| Tenor (at 25% p.a.) | Total markup |
 | --- | --- |
-| 1–12 months | 25% (factor 1.25) |
-| 13–24 months | 50% (factor 1.50) |
+| 3 months | 6.25% |
+| 6 months | 12.5% |
+| 12 months | 25% |
+| 18 months | 37.5% |
+| 24 months | 50% |
 | > 24 months | Unsupported |
 
-Total markup, **not** a monthly or interest rate. Profit = round-half-up(F × bps / 10 000);
+Total markup = rate × tenor ÷ 12, charged on the **financed amount only** — a disclosed profit on
+the sale, not interest. Profit = round-half-up(F × rate_bps × tenor ÷ 120 000);
 DSP = F + profit; regular instalment = ceil(DSP / tenor); final instalment adjusted so the
 schedule sums exactly to DSP. Approved tenors (sandbox): 3, 6, 9, 12, 18, 24 (intersected with
 partner-permitted tenors). Offers bind to their policy version; later pricing changes never alter
 an accepted offer.
 
+## Customer equity (`equityBounds`, `validateEquity`)
+The customer may pay part of the price themselves as **equity** (down payment), paid **to the
+merchant**, not the Bank. Equity reduces the **base** amount: `financed = purchase − equity`, and the
+profit markup is charged on the financed amount only.
+
+Example: ₦5,000,000 item, ₦2,000,000 equity → the Bank finances ₦3,000,000; at 25% p.a. over 12
+months profit = ₦750,000 (25% of ₦3,000,000, not of ₦5,000,000); deferred sale price ₦3,750,000.
+
+* Screen: after eligibility, before choosing a tenor (hosted checkout, "Your equity").
+* Minimum equity = MAX(0, purchase − max eligible financing); maximum = purchase − minimum financing.
+* Changing equity withdraws any presented offer; pricing is always recomputed server-side.
+* Timing: payable to the merchant once the Bank approves (`FINANCING_APPROVED` … `FINANCING_BOOKED`).
+  The merchant confirms receipt with `POST /api/v1/orders/{ref}/equity` (exact amount, receipt
+  reference, idempotent). Until then the Bank **cannot** initiate the vendor payment
+  (`CONTRIBUTION_NOT_VERIFIED`) and the release gate stays closed. The Bank pays the vendor only the
+  financed amount. Reported to ARAF as `EQUITY_CONFIRMED`.
+* Enabled by policy (`customerEquityEnabled`) **and** per partner (`partial_financing_enabled`).
+
 ## Cart comparison (`compareEligibilityToCart`)
-* A: eligible ≥ cart → finance the cart. B: equal → full financing.
-* C: eligible < cart → partial financing (contribution = shortfall) **only if enabled**
-  (disabled by default) → otherwise cart revision via a new, server-validated checkout
+* A: eligible ≥ cart → finance the cart (equity optional). B: equal → full financing.
+* C: eligible < cart → customer equity covers the shortfall (`EQUITY_REQUIRED`) when equity is
+  enabled → otherwise cart revision via a new, server-validated checkout
   session (`revises_session_id`); valid assessments are reused, affordability recomputed.
 * D: eligible = 0 (or below minimum financing ₦20,000, sandbox assumption) → decline.
 * Unused eligibility is never cash, never a reusable balance.

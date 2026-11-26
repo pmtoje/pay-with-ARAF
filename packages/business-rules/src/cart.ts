@@ -48,18 +48,20 @@ export function validateCart(lines: CartLine[], declaredAmount: Kobo, rules: Car
 
 export type CartComparison =
   | { outcome: 'FULL_FINANCING'; financingAmount: Kobo; contributionAmount: 0n }
-  | { outcome: 'PARTIAL_FINANCING'; financingAmount: Kobo; contributionAmount: Kobo }
+  | { outcome: 'EQUITY_REQUIRED'; financingAmount: Kobo; contributionAmount: Kobo }
   | { outcome: 'CART_REVISION_REQUIRED'; eligibleAmount: Kobo; shortfall: Kobo }
   | { outcome: 'DECLINED'; reason: 'NO_ELIGIBILITY' | 'BELOW_MINIMUM_FINANCING' };
 
 /**
  * Compare maximum eligible financing to the cart (spec §29).
+ * When eligibility is below the cart and customer equity is enabled, the customer may pay the
+ * shortfall (or more) as equity to the merchant; only the remainder is financed.
  * Unused eligibility is never offered as cash or as a reusable balance.
  */
 export function compareEligibilityToCart(
   eligibleAmount: Kobo,
   cartAmount: Kobo,
-  partialFinancingEnabled: boolean,
+  customerEquityEnabled: boolean,
   minimumFinancing: Kobo,
 ): CartComparison {
   if (eligibleAmount <= 0n) return { outcome: 'DECLINED', reason: 'NO_ELIGIBILITY' };
@@ -67,8 +69,40 @@ export function compareEligibilityToCart(
     return { outcome: 'FULL_FINANCING', financingAmount: cartAmount, contributionAmount: 0n };
   }
   if (eligibleAmount < minimumFinancing) return { outcome: 'DECLINED', reason: 'BELOW_MINIMUM_FINANCING' };
-  if (partialFinancingEnabled) {
-    return { outcome: 'PARTIAL_FINANCING', financingAmount: eligibleAmount, contributionAmount: cartAmount - eligibleAmount };
+  if (customerEquityEnabled) {
+    return { outcome: 'EQUITY_REQUIRED', financingAmount: eligibleAmount, contributionAmount: cartAmount - eligibleAmount };
   }
   return { outcome: 'CART_REVISION_REQUIRED', eligibleAmount, shortfall: cartAmount - eligibleAmount };
+}
+
+export interface EquityBounds {
+  /** Smallest equity the customer must pay (the gap between the price and what they are eligible for). */
+  minEquity: Kobo;
+  /** Largest equity allowed (the financed remainder must still meet the minimum financing amount). */
+  maxEquity: Kobo;
+  /** False when equity is disabled or no equity amount can produce an eligible financing. */
+  available: boolean;
+}
+
+/**
+ * Customer equity (down payment) paid to the merchant towards the item.
+ * Equity reduces the BASE amount: financed = purchase price − equity, and the profit markup is
+ * charged only on the financed amount. Example: ₦5,000,000 item, ₦2,000,000 equity → the Bank
+ * finances ₦3,000,000 and the markup is on ₦3,000,000.
+ */
+export function equityBounds(purchaseAmount: Kobo, maxEligibleFinancing: Kobo, minimumFinancing: Kobo, customerEquityEnabled: boolean): EquityBounds {
+  const minEquity = purchaseAmount > maxEligibleFinancing ? purchaseAmount - maxEligibleFinancing : 0n;
+  const maxEquity = purchaseAmount - minimumFinancing;
+  if (!customerEquityEnabled) return { minEquity: 0n, maxEquity: 0n, available: minEquity === 0n };
+  return { minEquity, maxEquity: maxEquity < 0n ? 0n : maxEquity, available: maxEquity >= minEquity };
+}
+
+export type EquityValidationError = 'EQUITY_DISABLED' | 'EQUITY_BELOW_MINIMUM' | 'EQUITY_ABOVE_MAXIMUM' | 'EQUITY_NEGATIVE';
+
+export function validateEquity(equity: Kobo, bounds: EquityBounds, customerEquityEnabled: boolean): EquityValidationError | null {
+  if (equity < 0n) return 'EQUITY_NEGATIVE';
+  if (equity > 0n && !customerEquityEnabled) return 'EQUITY_DISABLED';
+  if (equity < bounds.minEquity) return 'EQUITY_BELOW_MINIMUM';
+  if (equity > 0n && equity > bounds.maxEquity) return 'EQUITY_ABOVE_MAXIMUM';
+  return null;
 }

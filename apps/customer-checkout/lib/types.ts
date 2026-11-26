@@ -33,6 +33,7 @@ export interface Offer {
   financing_amount: number;
   contribution: number;
   tenor_months: number;
+  annual_profit_rate_percent: number;
   markup_percent_total: number;
   profit: number;
   deferred_sale_price: number;
@@ -76,6 +77,20 @@ export interface View {
   fulfilment?: Array<{ status: string; at: string; tracking_reference: string | null; carrier: string | null }>;
   exception?: { message: string | null } | null;
   contact_window_hours?: { min: number; max: number } | null;
+  equity?: EquityView;
+  annual_profit_rate_percent?: number;
+}
+
+export interface EquityView {
+  required: boolean;
+  amount: number;
+  status: 'NOT_REQUIRED' | 'DUE_AFTER_APPROVAL' | 'AWAITING_PAYMENT' | 'CONFIRMED';
+  payable: boolean;
+  payment_reference?: string | null;
+  confirmed_at?: string | null;
+  purchase_amount: number | null;
+  financed_amount: number | null;
+  pay_url: string | null;
 }
 
 export interface ConsentItem {
@@ -92,8 +107,12 @@ export interface OfferOptions {
   financing_amount: number;
   contribution: number;
   max_eligible_amount: number | null;
+  annual_profit_rate_percent: number;
+  max_tenor_months: number;
+  equity: { enabled: boolean; required: boolean; min: number; max: number; amount: number; payee: 'MERCHANT' };
   options: Array<{
     tenor_months: number;
+    annual_profit_rate_percent: number;
     markup_percent_total: number;
     profit: number;
     deferred_sale_price: number;

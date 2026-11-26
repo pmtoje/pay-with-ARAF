@@ -44,7 +44,9 @@ export default function Applications() {
         params={[
           { name: 'status', type: 'string', required: true, description: 'Merchant status (see below).' },
           { name: 'purchase_amount', type: 'integer (kobo)', required: true, description: 'Cart total.' },
-          { name: 'customer_contribution', type: 'integer (kobo)', required: true, description: 'Any part of the cart paid by the customer rather than financed (0 unless partial financing is enabled for your account).' },
+          { name: 'customer_contribution', type: 'integer (kobo)', required: true, description: 'Customer equity: the part of the price the customer pays to you rather than financing it (0 if none).' },
+          { name: 'financed_amount', type: 'integer (kobo)', required: true, description: 'purchase_amount − customer_contribution. The Bank pays the vendor this amount and charges profit only on it.' },
+          { name: 'equity', type: 'object', required: true, description: <><code>required</code>, <code>amount</code>, <code>status</code> (<code>NOT_REQUIRED</code> · <code>DUE_AFTER_APPROVAL</code> · <code>AWAITING_PAYMENT</code> · <code>CONFIRMED</code>), <code>payable</code>, <code>payment_reference</code>, <code>confirmed_at</code>. Collect equity when <code>payable</code> is true, then confirm it with <code>POST /orders/{'{ref}'}/equity</code>.</> },
           { name: 'vendor_payment', type: 'object | null', required: true, description: 'Latest vendor payment instruction: reference, status, amount, confirmed_at, simulated.' },
           { name: 'release', type: 'object', required: true, description: <><code>{'{ authorized: false }'}</code> until a release exists; then reference, status, authorized (true while AUTHORIZED or after use, CONSUMED) and authorized_at. Verify with the releases endpoint before handing over goods.</> },
           { name: 'timeline', type: 'array', required: true, description: 'Merchant-status history ({ status, at }).' },

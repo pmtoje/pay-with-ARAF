@@ -10,6 +10,8 @@ export interface AppDetail {
   partner: { id: string; name: string; code: string };
   order: { reference: string; status: string; amount: number; items: Array<{ sku: string; name: string; quantity: number; unit_amount: number; line_amount: number; category: string }> };
   amounts: { purchase: number; eligible?: number | null; financing: number | null; contribution: number | null };
+  equity?: { required: boolean; amount: number; status: string; payable: boolean; payment_reference?: string | null; confirmed_at?: string | null };
+  annual_profit_rate_percent?: number;
   income_profile: string | null;
   customer: { name: string; bvn: string; phone: string } | null;
   account: { number: string; name: string; product: string; source: string } | null;

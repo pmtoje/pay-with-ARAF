@@ -41,6 +41,7 @@ export function TrackingStep() {
         </div>
         {s === 'EXCEPTION' && <Alert tone="info" title="We’re resolving an issue">{view.exception?.message ?? 'We are resolving an issue with your application. No action is needed from you — we will contact you if anything is needed.'}</Alert>}
         {s !== 'EXCEPTION' && view.exception?.message && <Alert tone="warning">{view.exception.message}</Alert>}
+        {view.equity?.required && view.equity.status !== 'DUE_AFTER_APPROVAL' && <EquityPayment />}
         {action}
         {done && (
           <Alert tone="success" title="Enjoy your purchase">
@@ -98,6 +99,31 @@ function Milestones({ items }: { items: Milestone[] }) {
   );
 }
 
+/** Equity is paid to the merchant, not the Bank. The Bank pays the vendor only after the merchant confirms receipt. */
+function EquityPayment() {
+  const { view, summary } = useCheckout();
+  const eq = view.equity!;
+  if (eq.status === 'CONFIRMED') {
+    return (
+      <Alert tone="success" title="Equity received">
+        {summary.partner.name} confirmed your equity of {formatNaira(eq.amount)}{eq.payment_reference ? ` (receipt ${eq.payment_reference})` : ''}. The Bank finances the remaining {formatNaira(eq.financed_amount ?? 0)}.
+      </Alert>
+    );
+  }
+  return (
+    <Alert tone="gold" title={`Pay your equity of ${formatNaira(eq.amount)} to ${summary.partner.name}`}>
+      <p>Your financing is approved. Pay your agreed equity directly to {summary.partner.name}. Once they confirm it, the Bank pays the vendor the financed {formatNaira(eq.financed_amount ?? 0)}.</p>
+      {eq.pay_url && (
+        <div className="mt-3">
+          <MerchantLink href={eq.pay_url} variant="primary">
+            Pay equity at {summary.partner.name}
+          </MerchantLink>
+        </div>
+      )}
+    </Alert>
+  );
+}
+
 function AgreedTerms() {
   const { view } = useCheckout();
   const o = view.offer!;
@@ -112,7 +138,9 @@ function AgreedTerms() {
       <div className="border-t border-border px-5 pb-4 sm:px-7">
         <dl className="divide-y divide-border">
           <Row label="Item price" value={formatNaira(o.purchase_amount)} />
-          <Row label={`Profit markup (${o.markup_percent_total}% total)`} value={formatNaira(o.profit)} />
+          {o.contribution > 0 && <Row label="Your equity (paid to the merchant)" value={formatNaira(o.contribution)} />}
+          <Row label="Amount financed" value={formatNaira(o.financing_amount)} />
+          <Row label={`Profit markup (${o.annual_profit_rate_percent}% p.a. × ${o.tenor_months} months)`} value={formatNaira(o.profit)} />
           <Row label="Deferred sale price" value={formatNaira(o.deferred_sale_price)} strong />
           <Row label="Monthly repayment" value={`${formatNaira(o.monthly_repayment)} × ${o.tenor_months}`} />
           {o.schedule[0] && <Row label="First instalment due" value={formatDate(o.schedule[0].due_date)} />}

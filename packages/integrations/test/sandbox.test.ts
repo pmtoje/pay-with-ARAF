@@ -17,7 +17,7 @@ describe('sandbox simulator → Bank salary rules', () => {
     if (r.kind !== 'RECOGNISED') return;
     expect(r.recognisedMonthlySalary).toBe(48_000_000n);
     const cap = availableMonthlyCapacity(r.recognisedMonthlySalary, 5_000_000n, P);
-    expect(maxAffordableFinancing(cap, 12, P)).toBe(105_446_400n);
+    expect(maxAffordableFinancing(cap, 12, P, { annualProfitRateBps: 2500 })).toBe(105_446_400n);
   });
   it('missing salary month → decline', () => expect(run('22200000011').kind).toBe('DECLINE_MISSING_SALARY'));
   it('uncertain salary → review', () => expect(run('22200000015').kind).toBe('REVIEW_REQUIRED'));

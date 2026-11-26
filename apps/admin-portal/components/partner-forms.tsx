@@ -23,6 +23,9 @@ export interface PartnerConfig {
   application_expiry_minutes: number;
   order_reservation_minutes: number;
   partial_financing_enabled: boolean;
+  customer_equity_enabled?: boolean;
+  /** Product pricing: profit rate per annum (25 = 25% p.a.). */
+  annual_profit_rate_percent?: number;
   allow_multiple_vendors: boolean;
   settlement_arrangement: string;
   sandbox_enabled: boolean;
@@ -183,6 +186,8 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
   const [expiry, setExpiry] = useState(String(base?.application_expiry_minutes ?? 1440));
   const [reservation, setReservation] = useState(String(base?.order_reservation_minutes ?? 4320));
   const [multi, setMulti] = useState(base?.allow_multiple_vendors ?? false);
+  const [equity, setEquity] = useState(base?.partial_financing_enabled ?? true);
+  const [rate, setRate] = useState(String(base?.annual_profit_rate_percent ?? 25));
   const [settlement, setSettlement] = useState(base?.settlement_arrangement ?? 'DIRECT_TO_VENDOR');
   const [origins, setOrigins] = useState((domains ?? []).filter((d) => d.kind === 'RETURN_URL_ORIGIN').map((d) => d.value).join('\n'));
   const [busy, setBusy] = useState(false);
@@ -197,6 +202,8 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
   if (!maxN || maxN <= 0) local.max_transaction_naira = 'Enter a positive whole naira amount.';
   else if (minN && maxN < minN) local.max_transaction_naira = 'Maximum must be at least the minimum.';
   if (!tenors.length) local.permitted_tenors = 'Select at least one tenor.';
+  const rateN = /^\d{1,3}(\.\d{1,2})?$/.test(rate.trim()) ? Number(rate.trim()) : NaN;
+  if (!(rateN >= 0 && rateN <= 100)) local.annual_profit_rate_percent = 'Enter a rate between 0 and 100, with up to 2 decimals.';
   if (!cats.length) local.eligible_categories = 'Add at least one category.';
   const originList = origins.split(/[\s,]+/).map((o) => o.trim()).filter(Boolean);
   if (!originList.length) local.return_url_origins = 'Add at least one return URL origin.';
@@ -218,7 +225,8 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
         eligible_categories: cats,
         application_expiry_minutes: toInt(expiry) ?? 0,
         order_reservation_minutes: toInt(reservation) ?? 0,
-        partial_financing_enabled: false,
+        partial_financing_enabled: equity,
+        annual_profit_rate_percent: rateN,
         allow_multiple_vendors: multi,
         settlement_arrangement: settlement,
         return_url_origins: originList,
@@ -246,9 +254,12 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
       </fieldset>
 
       <fieldset>
-        <legend className="text-sm font-semibold text-fg">Product & tenors</legend>
-        <p className="mt-0.5 text-xs text-muted">Only tenors approved by the active credit policy can be offered: {POLICY_TENORS.join(', ')} months.</p>
+        <legend className="text-sm font-semibold text-fg">Product, pricing & tenors</legend>
+        <p className="mt-0.5 text-xs text-muted">Only tenors approved by the active credit policy can be offered (maximum 24 months): {POLICY_TENORS.join(', ')} months.</p>
         <div className="mt-3"><Checkbox checked readOnly disabled label="Murabaha asset financing" description="The only permitted product in this build." /></div>
+        <Field className="mt-3 max-w-xs" label="Profit rate (% per annum)" required error={show('annual_profit_rate_percent')} hint={Number.isFinite(rateN) ? `12 months = ${rateN}% total markup; 24 months = ${Math.round(rateN * 200) / 100}%. Applied to the financed amount only.` : undefined}>
+          {(ids) => <Input id={ids.id} inputMode="decimal" aria-describedby={ids.describedBy} aria-invalid={ids.invalid} value={rate} onChange={(e) => setRate(e.target.value)} />}
+        </Field>
         <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Permitted tenors">
           {POLICY_TENORS.map((t) => {
             const on = tenors.includes(t);
@@ -288,7 +299,7 @@ export function ConfigForm({ partnerId, base, domains, partnerStatus, onSaved, o
         </Field>
         <Checkbox checked={multi} onChange={(e) => setMulti(e.target.checked)} label="Allow multiple vendors per order" />
         <div>
-          <Checkbox checked={false} disabled readOnly label="Partial financing (customer contribution)" description="Disabled by the active credit policy pending Bank approval. It cannot be enabled per partner." />
+          <Checkbox checked={equity} onChange={(e) => setEquity(e.target.checked)} label="Customer equity (down payment)" description="Customers may pay part of the price to the partner; the Bank finances only the remainder and charges profit on the financed amount. The partner confirms receipt before the Bank pays the vendor." />
         </div>
       </fieldset>
 
@@ -321,7 +332,8 @@ export function ConfigSummary({ c }: { c: PartnerConfig }) {
       {row('Order reservation', `${c.order_reservation_minutes.toLocaleString()} min`)}
       {row('Settlement', c.settlement_arrangement === 'DIRECT_TO_VENDOR' ? 'Direct to vendor' : 'To marketplace')}
       {row('Multiple vendors', c.allow_multiple_vendors ? 'Allowed' : 'Not allowed')}
-      {row('Partial financing', c.partial_financing_enabled ? 'Enabled' : 'Disabled (policy)')}
+      {row('Profit rate', c.annual_profit_rate_percent !== undefined ? `${c.annual_profit_rate_percent}% per annum` : '—')}
+      {row('Customer equity', c.partial_financing_enabled ? 'Enabled — financed = price − equity' : 'Disabled')}
       {row('Environments', <span className="inline-flex gap-1"><Badge tone={c.sandbox_enabled ? 'success' : 'neutral'}>Sandbox {c.sandbox_enabled ? 'on' : 'off'}</Badge><Badge tone={c.production_enabled ? 'success' : 'neutral'}>Production {c.production_enabled ? 'on' : 'off'}</Badge></span>)}
     </dl>
   );

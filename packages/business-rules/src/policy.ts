@@ -19,27 +19,33 @@ export const scoreBandSchema = z.object({
   action: z.enum(['DECLINE', 'ENHANCED_REVIEW', 'PROCEED']),
 });
 
-export const markupTierSchema = z.object({
-  minTenorMonths: z.number().int().positive(),
-  maxTenorMonths: z.number().int().positive(),
-  /** Total markup over the tenor in basis points (2500 = 25% total, not per month). */
-  markupBps: z.number().int().nonnegative(),
-});
+/** Absolute ceiling on tenor: Pay with ARAF financing can never exceed 24 months. */
+export const ABSOLUTE_MAX_TENOR_MONTHS = 24;
 
 export const creditPolicyRulesSchema = z
   .object({
     scoreRange: z.object({ min: z.number().int(), max: z.number().int() }),
     scoreBands: z.array(scoreBandSchema).min(1),
     thinFileTreatment: z.enum(['DECLINE', 'MANUAL_REVIEW']),
+    /** Salary earners: total monthly obligations ÷ recognised monthly salary must not exceed this. */
     maxRepaymentToIncomeRatio: decimalString,
+    /** Business owners: total monthly obligations ÷ average monthly turnover must not exceed this. */
+    maxRepaymentToTurnoverRatio: decimalString,
     obligationsSource: z.enum(['BUREAU', 'STATEMENT', 'MAX']),
     singleObligorLimitKobo: koboString,
     exposureBasis: z.enum(['FINANCING_AMOUNT', 'DEFERRED_SALE_PRICE']),
     approvedTenorsMonths: z.array(z.number().int().positive()).min(1),
-    markupTiers: z.array(markupTierSchema).min(1),
+    /** Longest tenor the policy allows (never above ABSOLUTE_MAX_TENOR_MONTHS). */
+    maxTenorMonths: z.number().int().positive().max(ABSOLUTE_MAX_TENOR_MONTHS),
+    /**
+     * Default profit rate PER ANNUM in basis points (2500 = 25% p.a.), used when a financing
+     * product does not set its own rate. Each partner product carries its own approved rate.
+     */
+    defaultAnnualProfitRateBps: z.number().int().min(0).max(10_000),
     statementMonths: z.object({ SALARY_EARNER: z.number().int().positive(), BUSINESS_OWNER: z.number().int().positive() }),
     businessOwnerManualReview: z.boolean(),
-    partialFinancingEnabled: z.boolean(),
+    /** Customer equity: the customer may pay part of the price to the merchant; only the remainder is financed. */
+    customerEquityEnabled: z.boolean(),
     minimumFinancingKobo: koboString,
     offerValidityMinutes: z.number().int().positive(),
     assessmentValidityDays: z.number().int().positive(),
@@ -63,15 +69,9 @@ export const creditPolicyRulesSchema = z
     if (expected - 1 !== rules.scoreRange.max) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Score bands must cover the full score range' });
     }
-    const tiers = [...rules.markupTiers].sort((a, b) => a.minTenorMonths - b.minTenorMonths);
-    for (let i = 1; i < tiers.length; i++) {
-      if (tiers[i].minTenorMonths <= tiers[i - 1].maxTenorMonths) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Markup tiers overlap' });
-      }
-    }
     for (const t of rules.approvedTenorsMonths) {
-      if (!tiers.some((tier) => t >= tier.minTenorMonths && t <= tier.maxTenorMonths)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Approved tenor ${t} has no markup tier` });
+      if (t > rules.maxTenorMonths) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Approved tenor ${t} exceeds the maximum tenor of ${rules.maxTenorMonths} months` });
       }
     }
     if (rules.minimumAgeYears >= rules.maximumAgeYears) {
@@ -91,17 +91,16 @@ export const PROPOSED_SANDBOX_POLICY: CreditPolicyRules = {
   ],
   thinFileTreatment: 'MANUAL_REVIEW',
   maxRepaymentToIncomeRatio: '0.333',
+  maxRepaymentToTurnoverRatio: '0.10',
   obligationsSource: 'MAX',
   singleObligorLimitKobo: '500000000', // ₦5,000,000
   exposureBasis: 'FINANCING_AMOUNT',
   approvedTenorsMonths: [3, 6, 9, 12, 18, 24],
-  markupTiers: [
-    { minTenorMonths: 1, maxTenorMonths: 12, markupBps: 2500 },
-    { minTenorMonths: 13, maxTenorMonths: 24, markupBps: 5000 },
-  ],
+  maxTenorMonths: 24,
+  defaultAnnualProfitRateBps: 2500, // 25% per annum
   statementMonths: { SALARY_EARNER: 6, BUSINESS_OWNER: 12 },
-  businessOwnerManualReview: true,
-  partialFinancingEnabled: false,
+  businessOwnerManualReview: false,
+  customerEquityEnabled: true,
   minimumFinancingKobo: '2000000', // ₦20,000 (sandbox assumption)
   offerValidityMinutes: 60 * 24,
   assessmentValidityDays: 30,
@@ -112,6 +111,30 @@ export const PROPOSED_SANDBOX_POLICY: CreditPolicyRules = {
   pdfMaxBytes: 5 * 1024 * 1024,
 };
 
+/**
+ * Policy versions are immutable records. Versions stored before per-annum pricing (which used
+ * `markupTiers` of 25% / 50% total and `partialFinancingEnabled`) are read with the equivalent
+ * per-annum fields so in-flight applications remain readable; their accepted offers keep the
+ * amounts priced at the time.
+ */
+function upgradeLegacyRules(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const r = { ...(input as Record<string, unknown>) };
+  if ('markupTiers' in r && !('defaultAnnualProfitRateBps' in r)) {
+    const tiers = r.markupTiers as Array<{ maxTenorMonths: number; markupBps: number }>;
+    const first = [...tiers].sort((a, b) => a.maxTenorMonths - b.maxTenorMonths)[0];
+    r.defaultAnnualProfitRateBps = Math.round((first.markupBps * 12) / first.maxTenorMonths);
+    r.maxTenorMonths = Math.min(ABSOLUTE_MAX_TENOR_MONTHS, Math.max(...tiers.map((t) => t.maxTenorMonths)));
+    delete r.markupTiers;
+  }
+  if (!('maxRepaymentToTurnoverRatio' in r)) r.maxRepaymentToTurnoverRatio = '0.10';
+  if ('partialFinancingEnabled' in r && !('customerEquityEnabled' in r)) {
+    r.customerEquityEnabled = r.partialFinancingEnabled;
+    delete r.partialFinancingEnabled;
+  }
+  return r;
+}
+
 export function parsePolicyRules(input: unknown): CreditPolicyRules {
-  return creditPolicyRulesSchema.parse(input);
+  return creditPolicyRulesSchema.parse(upgradeLegacyRules(input));
 }

@@ -165,7 +165,7 @@ describe('Sandbox scenarios and security controls', () => {
     expect(otp.body.eligibility.reasons).not.toContain('CART_REVISION_REQUIRED');
   });
 
-  it('14. business owner → 12-month statement and manual review queue', async () => {
+  it('14. business owner → 12-month statement; SeedFi + Periculum; repayments capped at 10% of turnover', async () => {
     const { c, ref } = await start('22200000014', '1980-10-01');
     await toStatement(c, 'BUSINESS_OWNER');
     const st0 = await c.state();
@@ -173,11 +173,127 @@ describe('Sandbox scenarios and security controls', () => {
     await c.post('/statements/altbank');
     await drain(h, 1);
     const st = await c.state();
-    expect(st.state).toBe('AFFORDABILITY_REVIEW_REQUIRED');
-    expect(st.contact_window_hours).toEqual({ min: 24, max: 48 });
-    const reviews = (await analyst.get('/api/admin/reviews?queue=BUSINESS_OWNER')).body as Array<{ application_reference: string }>;
-    expect(reviews.some((r) => r.application_reference === ref)).toBe(true);
+    expect(st.state, JSON.stringify(st)).toBe('ELIGIBLE');
+    const app = await appOf(ref);
+    // Both checks ran: the SeedFi credit check and the Periculum analysis.
+    expect(await h.prisma.creditAssessment.count({ where: { applicationId: app.id, status: 'COMPLETED' } })).toBeGreaterThan(0);
+    const analysis = await h.prisma.statementAnalysisResult.findFirstOrThrow({ where: { applicationId: app.id } });
+    const a14 = await h.prisma.affordabilityAssessment.findFirstOrThrow({ where: { applicationId: app.id }, orderBy: { createdAt: 'desc' } });
+    expect(a14.incomeProfile).toBe('BUSINESS_OWNER');
+    expect(a14.recognisedMonthlyIncomeKobo).toBe(analysis.businessRevenueMonthlyKobo);
+    const turnover = analysis.businessRevenueMonthlyKobo!;
+    expect(a14.capacityKobo).toBe(turnover / 10n - a14.existingMonthlyObligationsKobo!);
+    // Every option the customer can pick keeps total repayments within 10% of turnover.
+    const offers = (await c.get('/offers')).body as { options: Array<{ affordable: boolean; monthly_repayment: number }> };
+    for (const o of offers.options.filter((x) => x.affordable)) expect(BigInt(o.monthly_repayment) + a14.existingMonthlyObligationsKobo! <= turnover / 10n).toBe(true);
   });
+
+  it('equity: customer pays part to the merchant, the Bank finances and marks up only the remainder', async () => {
+    const e = await onboardPartner(h, { name: 'EquityMall', equity: true, ratePercent: 25 });
+    const res = await createCheckout(h, e, cart(`EQ-${Date.now()}`, 450_000));
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const ref = res.body.application_reference as string;
+    const orderRef = (await h.prisma.merchantOrder.findFirstOrThrow({ where: { checkoutSessions: { some: { id: res.body.session_id } } } })).merchantOrderReference;
+    const merchant = (path: string, body: object) => request(h.http).post(`/api/v1/orders/${orderRef}${path}`).set('Authorization', `Bearer ${e.apiKey}`).send(body);
+    const c = await openCheckout(h, res.body.session_id);
+    await verifyIdentity(h, c, '22200000013', '1996-05-05');
+    await toStatement(c);
+    await c.post('/statements/altbank');
+    await drain(h, 1);
+    const st = await c.state();
+    expect(st.state).toBe('ELIGIBLE');
+    expect(st.eligibility.reasons).toContain('EQUITY_REQUIRED'); // instead of a cart revision
+    const o1 = (await c.get('/offers')).body;
+    expect(o1.annual_profit_rate_percent).toBe(25);
+    expect(o1.max_tenor_months).toBe(24);
+    expect(o1.equity).toMatchObject({ enabled: true, required: true, min: 45_000_000 - o1.max_eligible_amount });
+    // Below the minimum equity, or above the maximum, is rejected server-side.
+    expect((await c.post('/equity', { amount: o1.equity.min - 1 })).body.error.code).toBe('VALIDATION_FAILED');
+    expect((await c.post('/equity', { amount: 45_000_000 })).body.error.code).toBe('VALIDATION_FAILED');
+    const equity = o1.equity.min + 1_000_000; // shortfall + ₦10,000
+    const set = await c.post('/equity', { amount: equity });
+    expect(set.status, JSON.stringify(set.body)).toBe(200);
+    expect(set.body.equity).toMatchObject({ required: true, amount: equity, status: 'DUE_AFTER_APPROVAL', financed_amount: 45_000_000 - equity });
+    const o2 = (await c.get('/offers')).body;
+    expect(o2.financing_amount).toBe(45_000_000 - equity);
+    const pick = o2.options.find((o: { affordable: boolean }) => o.affordable);
+    expect(pick, JSON.stringify(o2)).toBeTruthy();
+    const sel = await c.post('/offers/select', { tenor_months: pick.tenor_months });
+    expect(sel.status, JSON.stringify(sel.body)).toBe(200);
+    const financed = BigInt(45_000_000 - equity);
+    const num = financed * BigInt(2500 * pick.tenor_months);
+    const expectedProfit = num / 120_000n + ((num % 120_000n) * 2n >= 120_000n ? 1n : 0n);
+    expect(BigInt(sel.body.offer.profit)).toBe(expectedProfit); // markup on the financed amount only
+    expect(sel.body.offer).toMatchObject({ purchase_amount: 45_000_000, contribution: equity, financing_amount: 45_000_000 - equity, annual_profit_rate_percent: 25 });
+    // Changing equity withdraws the presented offer and requires a fresh one.
+    const changed = await c.post('/equity', { amount: equity + 100 });
+    expect(changed.body.state).toBe('ELIGIBLE');
+    expect(changed.body.offer).toBeNull();
+    await c.post('/equity', { amount: equity });
+    const sel2 = await c.post('/offers/select', { tenor_months: pick.tenor_months });
+    const acc = await c.post('/offers/accept', { offer_id: sel2.body.offer.id, accept_terms: true });
+    expect(acc.status, JSON.stringify(acc.body)).toBe(200);
+    await drain(h, 2);
+    // Equity is payable only after the Bank approves.
+    expect((await merchant('/equity', { amount: equity, payment_reference: 'EQ-RCPT-0001' })).body.error.code).toBe('INVALID_STATE');
+    await arafApprove(h, ref, analyst, approver);
+    const fresh = await openCheckout(h, res.body.session_id);
+    await fresh.post('/resume');
+    await fresh.post('/resume/verify', { code: await latestOtp(h, res.body.session_id) });
+    expect((await fresh.state()).equity).toMatchObject({ status: 'AWAITING_PAYMENT', payable: true });
+    expect((await fresh.state()).equity.pay_url).toContain('http://localhost:3005/orders/');
+    await fresh.post('/documents/otp', { purpose: 'DOCUMENT_SIGNING' });
+    await fresh.post('/documents/sign', { code: await latestOtp(h, res.body.session_id) });
+    const m = await fresh.post('/mandate/start');
+    await request(h.http).post(`/api/sandbox/remita/${m.body.authorization_url.split('/').pop()}/authorize`).send({ approve: true });
+    await fresh.post('/mandate/verify');
+    const app = await appOf(ref);
+    await cad.post(`/api/admin/applications/${app.id}/invoice/verify`);
+    expect((await cad.post(`/api/admin/applications/${app.id}/booking`)).body.status).toBe('BOOKED');
+    // The Bank cannot pay the vendor while equity is outstanding.
+    const blocked = await settlement.post(`/api/admin/applications/${app.id}/vendor-payment`);
+    expect(blocked.body.error.code).toBe('PRECONDITIONS_NOT_MET');
+    expect(JSON.stringify(blocked.body)).toContain('CONTRIBUTION_NOT_VERIFIED');
+    // Merchant confirms receipt: the amount must match exactly; replays are idempotent.
+    expect((await merchant('/equity', { amount: equity - 1, payment_reference: 'EQ-RCPT-0001' })).body.error.code).toBe('EQUITY_AMOUNT_MISMATCH');
+    const ok = await merchant('/equity', { amount: equity, payment_reference: 'EQ-RCPT-0001' });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect((await merchant('/equity', { amount: equity, payment_reference: 'EQ-RCPT-0001' })).body).toMatchObject({ status: 'CONFIRMED', idempotent_replay: true });
+    expect((await merchant('/equity', { amount: equity, payment_reference: 'EQ-OTHER-0002' })).body.error.code).toBe('EQUITY_ALREADY_CONFIRMED');
+    const view = await request(h.http).get(`/api/v1/orders/${orderRef}`).set('Authorization', `Bearer ${e.apiKey}`);
+    expect(view.body.application.equity).toMatchObject({ status: 'CONFIRMED', amount: equity, payment_reference: 'EQ-RCPT-0001' });
+    expect(view.body.application.financed_amount).toBe(45_000_000 - equity);
+    // Now the Bank pays the vendor — only the financed remainder.
+    const ins = await settlement.post(`/api/admin/applications/${app.id}/vendor-payment`);
+    expect(ins.status, JSON.stringify(ins.body)).toBe(201);
+    expect((await h.prisma.vendorPaymentInstruction.findUniqueOrThrow({ where: { id: ins.body.id } })).amountKobo).toBe(financed);
+    const reports = (await h.prisma.arafOutboundReport.findMany({ where: { applicationId: app.id }, orderBy: { sequence: 'asc' } })).map((r) => r.type);
+    expect(reports).toContain('EQUITY_CONFIRMED');
+    expect(reports.indexOf('EQUITY_CONFIRMED')).toBeLessThan(reports.indexOf('VENDOR_PAYMENT_INITIATED'));
+   }, 180_000);
+
+  it('product pricing is per partner: another partner at 20% p.a. prices the same cart differently; tenors above 24 months are refused', async () => {
+    const maker = await staff(h, 'onboarding');
+    const bad = await maker.post(`/api/admin/partners/${a.id}/configuration`, {
+      min_transaction_naira: 20_000, max_transaction_naira: 5_000_000, permitted_products: ['MURABAHA_ASSET_FINANCING'], permitted_tenors: [12, 36],
+      eligible_categories: ['electronics'], application_expiry_minutes: 1440, order_reservation_minutes: 4320, partial_financing_enabled: false,
+      annual_profit_rate_percent: 25, allow_multiple_vendors: false, settlement_arrangement: 'DIRECT_TO_VENDOR', return_url_origins: ['http://localhost:3005'],
+    });
+    expect(bad.body.error.code).toBe('VALIDATION_FAILED');
+    const p20 = await onboardPartner(h, { name: 'TwentyMall', ratePercent: 20 });
+    const res = await createCheckout(h, p20, cart(`P20-${Date.now()}`, 300_000));
+    const c = await openCheckout(h, res.body.session_id);
+    await verifyIdentity(h, c, '22200000001', '1990-04-12');
+    await toStatement(c);
+    await c.post('/statements/altbank');
+    await drain(h, 1);
+    const o = (await c.get('/offers')).body;
+    expect(o.annual_profit_rate_percent).toBe(20);
+    const twelve = o.options.find((x: { tenor_months: number }) => x.tenor_months === 12);
+    expect(twelve.markup_percent_total).toBe(20);
+    expect(twelve.profit).toBe(6_000_000); // 20% of ₦300,000
+    await c.post('/cancel');
+   }, 180_000);
 
   it('uncertain salary classification → review, not decline', async () => {
     const { c, ref } = await start('22200000015', '1992-12-12');

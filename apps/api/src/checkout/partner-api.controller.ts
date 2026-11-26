@@ -57,6 +57,13 @@ export class PartnerApiController {
     return this.checkout.getRelease(req.api!.partnerId, req.api!.environment, reference);
   }
 
+  @Post('orders/:reference/equity')
+  @HttpCode(200)
+  @ApiKey('orders:write')
+  confirmEquity(@Param('reference') reference: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {
+    return this.ops.confirmEquity(req.api!.partnerId, req.api!.environment, reference, body, req.actor);
+  }
+
   @Post('orders/:reference/fulfil')
   @HttpCode(200)
   @ApiKey('orders:write')

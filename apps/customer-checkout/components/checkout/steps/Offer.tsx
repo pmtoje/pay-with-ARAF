@@ -6,15 +6,26 @@ import { errorCode } from '@/lib/api';
 import type { OfferOptions } from '@/lib/types';
 import { useAction, useCheckout } from '../context';
 import { ErrorNotice, MerchantLink, Row, StepCard, Why } from '../ui';
+import { EquityStep } from './Equity';
 
 const pct = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(2)}%`;
 
 export function OfferStep() {
   const { view } = useCheckout();
   const [comparing, setComparing] = useState(false);
+  // The equity screen comes first; once an offer exists the customer has already chosen.
+  const [equityChosen, setEquityChosen] = useState(view.state === 'OFFER_PRESENTED');
   if (view.eligibility?.reasons.includes('CART_REVISION_REQUIRED')) return <CartRevision />;
   if (view.state === 'OFFER_PRESENTED' && view.offer && view.offer.status === 'PRESENTED' && !comparing) return <OfferReview onChange={() => setComparing(true)} />;
-  return <TenorComparison onBack={view.state === 'OFFER_PRESENTED' && view.offer ? () => setComparing(false) : undefined} onSelected={() => setComparing(false)} />;
+  return (
+    <TenorComparison
+      equityChosen={equityChosen}
+      onEquityDone={() => setEquityChosen(true)}
+      onChangeEquity={() => setEquityChosen(false)}
+      onBack={view.state === 'OFFER_PRESENTED' && view.offer ? () => setComparing(false) : undefined}
+      onSelected={() => setComparing(false)}
+    />
+  );
 }
 
 function CartRevision() {
@@ -27,7 +38,7 @@ function CartRevision() {
         <Row label="Maximum you can finance" value={max !== null ? formatNaira(max) : '—'} strong />
       </dl>
       <p className="text-sm leading-relaxed text-muted">
-        Partial financing isn’t available for this purchase. To continue with Pay with ARAF, return to {summary.partner.name} and revise your cart to{max !== null ? ` ${formatNaira(max)} or less` : ' a lower amount'}. Your verification and assessment can be reused while they remain valid, so you won’t have to start over.
+        Paying part of the price as equity isn’t available for this purchase. To continue with Pay with ARAF, return to {summary.partner.name} and revise your cart to{max !== null ? ` ${formatNaira(max)} or less` : ' a lower amount'}. Your verification and assessment can be reused while they remain valid, so you won’t have to start over.
       </p>
       <MerchantLink href={summary.cancel_url} variant="primary" block>
         Revise my cart at {summary.partner.name}
@@ -36,8 +47,8 @@ function CartRevision() {
   );
 }
 
-function TenorComparison({ onBack, onSelected }: { onBack?: () => void; onSelected: () => void }) {
-  const { api, base, view } = useCheckout();
+function TenorComparison({ onBack, onSelected, equityChosen, onEquityDone, onChangeEquity }: { onBack?: () => void; onSelected: () => void; equityChosen: boolean; onEquityDone: () => void; onChangeEquity: () => void }) {
+  const { api, base, view, summary } = useCheckout();
   const { busy, error, run } = useAction();
   const [data, setData] = useState<OfferOptions | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -55,14 +66,26 @@ function TenorComparison({ onBack, onSelected }: { onBack?: () => void; onSelect
   }, [api, base]);
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, equityChosen]);
 
   const first = view.customer?.first_name;
+  if (data && data.equity.enabled && !equityChosen) {
+    return (
+      <EquityStep
+        data={data}
+        onDone={() => {
+          setData(null);
+          setTenor(null);
+          onEquityDone();
+        }}
+      />
+    );
+  }
   return (
     <StepCard
       eyebrow="Step 4 · Review offer"
       title={first ? `${first}, choose your repayment term` : 'Choose your repayment term'}
-      description="You’re eligible to finance this purchase. Compare the options — a longer term lowers your monthly repayment, and the total profit markup can be higher."
+      description={`Compare the options — a longer term lowers your monthly repayment, and the total profit markup is higher (${data?.annual_profit_rate_percent ?? 25}% per annum, up to ${data?.max_tenor_months ?? 24} months).`}
     >
       {loadError ? (
         <ErrorNotice error={loadError} action={<Button size="sm" variant="secondary" onClick={() => void load()}>Retry</Button>} />
@@ -74,10 +97,16 @@ function TenorComparison({ onBack, onSelected }: { onBack?: () => void; onSelect
         </div>
       ) : (
         <>
-          {data.contribution > 0 && (
-            <Alert tone="info" title="Upfront contribution">
-              You’ll pay {formatNaira(data.contribution)} upfront; {formatNaira(data.financing_amount)} is financed.
-            </Alert>
+          <dl className="divide-y divide-border rounded-md border border-border px-4">
+            <Row label="Item price" value={formatNaira(data.purchase_amount)} />
+            {data.contribution > 0 && <Row label={`Your equity (paid to ${summary.partner.name})`} value={formatNaira(data.contribution)} />}
+            <Row label="Amount the Bank finances" value={formatNaira(data.financing_amount)} strong />
+            <Row label="Profit rate" value={`${data.annual_profit_rate_percent}% per annum, on the financed amount`} />
+          </dl>
+          {data.equity.enabled && (
+            <button type="button" onClick={onChangeEquity} className="inline-flex min-h-[44px] items-center self-start text-sm font-medium text-gold-strong underline underline-offset-2">
+              {data.contribution > 0 ? 'Change my equity' : 'Pay some equity instead'}
+            </button>
           )}
           <fieldset>
             <legend className="sr-only">Repayment term</legend>
@@ -98,7 +127,7 @@ function TenorComparison({ onBack, onSelected }: { onBack?: () => void; onSelect
                         <input type="radio" name="tenor" className="h-4 w-4 accent-[rgb(var(--color-gold))]" checked={checked} disabled={!o.affordable} onChange={() => setTenor(o.tenor_months)} />
                         <span className="text-sm font-semibold text-fg">{o.tenor_months} months</span>
                       </span>
-                      <span className="text-xs text-muted">{pct(o.markup_percent_total)} total markup</span>
+                      <span className="text-right text-xs text-muted">{pct(o.annual_profit_rate_percent)} p.a. · {pct(o.markup_percent_total)} total</span>
                     </span>
                     <span className="mt-3 text-2xl font-semibold tabular-nums tracking-tight text-fg">
                       {formatNaira(o.monthly_repayment)}
@@ -126,7 +155,7 @@ function TenorComparison({ onBack, onSelected }: { onBack?: () => void; onSelect
               })}
             </div>
           </fieldset>
-          {data.options.every((o) => !o.affordable) && <Alert tone="warning">None of the available terms fit your repayment capacity for this cart.</Alert>}
+          {data.options.every((o) => !o.affordable) && <Alert tone="warning">None of the available terms fit your repayment capacity for this amount.{data.equity.enabled ? ' Paying more equity lowers the amount financed.' : ''}</Alert>}
           <Why>The profit markup is the Bank’s disclosed profit on selling the item to you. It is fixed when you accept and does not change over the term.</Why>
           <ErrorNotice error={error} />
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -196,10 +225,10 @@ function OfferReview({ onChange }: { onChange: () => void }) {
           <p className="text-sm text-muted">for {offer.tenor_months} months</p>
         </div>
         <dl className="divide-y divide-border px-4">
-          <Row label="Item price (Bank’s cost)" value={formatNaira(offer.purchase_amount)} />
-          {offer.contribution > 0 && <Row label="Your upfront contribution" value={formatNaira(offer.contribution)} />}
-          <Row label="Amount financed" value={formatNaira(offer.financing_amount)} />
-          <Row label={`Profit markup (${pct(offer.markup_percent_total)} total)`} value={formatNaira(offer.profit)} />
+          <Row label="Item price" value={formatNaira(offer.purchase_amount)} />
+          {offer.contribution > 0 && <Row label={`Your equity (paid to ${summary.partner.name})`} value={formatNaira(offer.contribution)} />}
+          <Row label="Amount financed (Bank’s cost)" value={formatNaira(offer.financing_amount)} />
+          <Row label={`Profit markup (${pct(offer.annual_profit_rate_percent)} p.a. × ${offer.tenor_months} months = ${pct(offer.markup_percent_total)})`} value={formatNaira(offer.profit)} />
           {offer.fees > 0 && <Row label="Fees" value={formatNaira(offer.fees)} />}
           <Row label="Deferred sale price (total you repay)" value={formatNaira(offer.deferred_sale_price)} strong />
         </dl>
@@ -246,7 +275,8 @@ function OfferReview({ onChange }: { onChange: () => void }) {
 
       <div className="space-y-2 rounded-md bg-surface-2 px-4 py-3 text-xs leading-relaxed text-muted">
         <p>
-          <span className="font-semibold text-fg">How Murabaha works:</span> The Alternative Bank buys the item from {summary.partner.name}’s vendor, then sells it to you at the deferred sale price above — the item price plus a disclosed, fixed profit markup — which you repay in instalments. This is not interest-based lending.
+          <span className="font-semibold text-fg">How Murabaha works:</span> The Alternative Bank buys the item from {summary.partner.name}’s vendor, then sells it to you at the deferred sale price above — the amount financed plus a disclosed, fixed profit markup — which you repay in instalments. This is not interest-based lending.
+          {offer.contribution > 0 && <> Your equity of {formatNaira(offer.contribution)} is paid to {summary.partner.name} after approval and is not marked up.</>}
         </p>
         <p>Terms version {offer.terms_version}. Accepting submits your application for the Bank’s review; it is not yet a sale contract.</p>
       </div>

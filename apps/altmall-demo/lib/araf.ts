@@ -73,6 +73,9 @@ export interface MerchantApplication {
   checkout_session_id: string;
   purchase_amount: number;
   customer_contribution: number;
+  /** Customer equity AltMall collects directly; the Bank finances only the remainder. */
+  equity: { required: boolean; amount: number; status: 'NOT_REQUIRED' | 'DUE_AFTER_APPROVAL' | 'AWAITING_PAYMENT' | 'CONFIRMED'; payable: boolean; payment_reference?: string | null; confirmed_at?: string | null };
+  financed_amount: number;
   vendor_payment: { reference: string; status: string; amount: number; confirmed_at: string | null; simulated: boolean } | null;
   release: { reference?: string; status?: string; authorized: boolean; authorized_at?: string | null };
   timeline: Array<{ status: string; at: string }>;
@@ -124,6 +127,7 @@ export const araf = {
   createCheckoutSession: (body: CreateSessionBody, idempotencyKey: string) => call<CheckoutSessionResponse>('POST', '/api/v1/checkout/sessions', body, { 'Idempotency-Key': idempotencyKey }),
   getOrder: (ref: string) => call<ArafOrder>('GET', `/api/v1/orders/${encodeURIComponent(ref)}`),
   getRelease: (ref: string) => call<ArafRelease>('GET', `/api/v1/releases/${encodeURIComponent(ref)}`),
+  confirmEquity: (ref: string, body: { amount: number; payment_reference: string }) => call<{ status: string; idempotent_replay: boolean }>('POST', `/api/v1/orders/${encodeURIComponent(ref)}/equity`, body),
   fulfil: (ref: string, body: { status: 'DISPATCHED'; tracking_reference?: string; carrier?: string }) => call<{ ok: boolean }>('POST', `/api/v1/orders/${encodeURIComponent(ref)}/fulfil`, body),
   deliver: (ref: string, body: { note?: string } = {}) => call<{ ok: boolean }>('POST', `/api/v1/orders/${encodeURIComponent(ref)}/deliver`, body),
   cancel: (ref: string, reason: string) => call<{ status: string; requires_reversal: boolean }>('POST', `/api/v1/orders/${encodeURIComponent(ref)}/cancel`, { reason }),

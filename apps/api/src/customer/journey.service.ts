@@ -13,7 +13,7 @@ import { PrismaService, type Tx } from '../common/prisma.service';
 import { AuditService, RateLimitService, StateService, SYSTEM_ACTOR, type Actor } from '../common/core.services';
 import { ProvidersService } from '../common/providers.service';
 import { AppContextService } from '../applications/app-context.service';
-import { customerStatus, n } from '../applications/presenters';
+import { customerStatus, equityView, n } from '../applications/presenters';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ArafReportingService } from '../araf/araf-reporting.service';
@@ -680,6 +680,7 @@ export class JourneyService {
       this.prisma.identityVerification.findFirst({ where: { applicationId, status: 'VERIFIED' }, orderBy: { createdAt: 'desc' } }),
     ]);
     const customer = app.customerId ? await this.prisma.customer.findUnique({ where: { id: app.customerId } }) : null;
+    const session = await this.prisma.checkoutSession.findUniqueOrThrow({ where: { id: app.checkoutSessionId } });
     const accepted = offers.find((o) => o.status === 'ACCEPTED');
     const presented = offers.find((o) => o.status === 'PRESENTED');
     const presentOffer = (o: (typeof offers)[number]) => ({
@@ -690,7 +691,8 @@ export class JourneyService {
       financing_amount: n(o.financingAmountKobo),
       contribution: n(o.contributionKobo),
       tenor_months: o.tenorMonths,
-      markup_percent_total: o.markupBps / 100,
+      annual_profit_rate_percent: o.annualProfitRateBps / 100,
+      markup_percent_total: (o.annualProfitRateBps * o.tenorMonths) / 1200,
       profit: n(o.profitKobo),
       deferred_sale_price: n(o.deferredSalePriceKobo),
       monthly_repayment: n(o.monthlyRepaymentKobo),
@@ -714,10 +716,13 @@ export class JourneyService {
         ? {
             outcome: assessment.outcome,
             max_eligible_amount: n(assessment.maxEligibleKobo),
-            reasons: assessment.reasons.filter((r) => ['CART_REVISION_REQUIRED', 'BUSINESS_OWNER_MANUAL_REVIEW', 'PARTIAL_FINANCING'].includes(r)),
+            reasons: assessment.reasons.filter((r) => ['CART_REVISION_REQUIRED', 'BUSINESS_OWNER_MANUAL_REVIEW', 'PARTIAL_FINANCING', 'EQUITY_REQUIRED'].includes(r)),
           }
         : null,
       offer: accepted ? presentOffer(accepted) : presented ? presentOffer(presented) : null,
+      // Equity is paid to the merchant (not the Bank) once the Bank approves; the customer returns to the merchant to pay.
+      equity: { ...equityView(app), purchase_amount: n(app.purchaseAmountKobo), financed_amount: n(app.purchaseAmountKobo - app.contributionAmountKobo), pay_url: equityView(app).payable ? session.returnUrl : null },
+      annual_profit_rate_percent: app.annualProfitRateBps / 100,
       documents: docs.map((d) => ({ id: d.id, type: d.docType, version: d.version, status: d.status, signed_at: d.signedAt })),
       mandate: mandate ? { status: mandate.status, reference: mandate.mandateReference, failure: mandate.failureCode } : null,
       vendor_payment: payment ? { status: payment.status, confirmed_at: payment.confirmedAt, simulated: payment.isSimulated } : null,

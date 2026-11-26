@@ -45,7 +45,10 @@ export const configInputSchema = z
     eligible_categories: z.array(z.string().trim().min(1).max(64)).min(1),
     application_expiry_minutes: z.number().int().min(30).max(60 * 24 * 30),
     order_reservation_minutes: z.number().int().min(30).max(60 * 24 * 30),
+    /** Customer equity: the customer may pay part of the price to the merchant; only the remainder is financed. */
     partial_financing_enabled: z.boolean(),
+    /** Product pricing: profit rate per annum, in percent with up to 2 decimals (25 = 25% p.a.). */
+    annual_profit_rate_percent: z.number().min(0).max(100).refine((v) => Number.isInteger(Math.round(v * 100)) && Math.abs(v * 100 - Math.round(v * 100)) < 1e-9, 'At most 2 decimal places').default(25),
     allow_multiple_vendors: z.boolean(),
     settlement_arrangement: z.enum(['DIRECT_TO_VENDOR', 'TO_MARKETPLACE']),
     return_url_origins: z.array(z.string().url()).min(1).max(10),
@@ -233,7 +236,7 @@ export class PartnersService implements OnModuleInit {
     };
   }
 
-  presentConfig(c: { id: string; version: number; status: string; minTransactionKobo: bigint; maxTransactionKobo: bigint; permittedProducts: string[]; permittedTenors: number[]; eligibleCategories: string[]; applicationExpiryMinutes: number; orderReservationMinutes: number; partialFinancingEnabled: boolean; allowMultipleVendors: boolean; settlementArrangement: string; sandboxEnabled: boolean; productionEnabled: boolean; approvedAt: Date | null; createdAt: Date }) {
+  presentConfig(c: { id: string; version: number; status: string; minTransactionKobo: bigint; maxTransactionKobo: bigint; permittedProducts: string[]; permittedTenors: number[]; eligibleCategories: string[]; applicationExpiryMinutes: number; orderReservationMinutes: number; partialFinancingEnabled: boolean; annualProfitRateBps: number; allowMultipleVendors: boolean; settlementArrangement: string; sandboxEnabled: boolean; productionEnabled: boolean; approvedAt: Date | null; createdAt: Date }) {
     return {
       id: c.id,
       version: c.version,
@@ -246,6 +249,8 @@ export class PartnersService implements OnModuleInit {
       application_expiry_minutes: c.applicationExpiryMinutes,
       order_reservation_minutes: c.orderReservationMinutes,
       partial_financing_enabled: c.partialFinancingEnabled,
+      customer_equity_enabled: c.partialFinancingEnabled,
+      annual_profit_rate_percent: c.annualProfitRateBps / 100,
       allow_multiple_vendors: c.allowMultipleVendors,
       settlement_arrangement: c.settlementArrangement,
       sandbox_enabled: c.sandboxEnabled,
@@ -334,8 +339,10 @@ export class PartnersService implements OnModuleInit {
     const policy = await this.activePolicyRules();
     const badTenors = input.permitted_tenors.filter((t) => !policy.approvedTenorsMonths.includes(t));
     if (badTenors.length) fail('VALIDATION_FAILED', { fields: [{ path: 'permitted_tenors', message: `Not approved by the active credit policy: ${badTenors.join(', ')}` }] });
-    if (input.partial_financing_enabled && !policy.partialFinancingEnabled) {
-      fail('VALIDATION_FAILED', { fields: [{ path: 'partial_financing_enabled', message: 'Partial financing is disabled by the active credit policy pending Bank approval.' }] });
+    const longTenors = input.permitted_tenors.filter((t) => t > policy.maxTenorMonths);
+    if (longTenors.length) fail('VALIDATION_FAILED', { fields: [{ path: 'permitted_tenors', message: `Tenors cannot exceed ${policy.maxTenorMonths} months: ${longTenors.join(', ')}` }] });
+    if (input.partial_financing_enabled && !policy.customerEquityEnabled) {
+      fail('VALIDATION_FAILED', { fields: [{ path: 'partial_financing_enabled', message: 'Customer equity is disabled by the active credit policy.' }] });
     }
     for (const o of input.return_url_origins) {
       const u = new URL(o);
@@ -357,6 +364,7 @@ export class PartnersService implements OnModuleInit {
           applicationExpiryMinutes: input.application_expiry_minutes,
           orderReservationMinutes: input.order_reservation_minutes,
           partialFinancingEnabled: input.partial_financing_enabled,
+          annualProfitRateBps: Math.round(input.annual_profit_rate_percent * 100),
           allowMultipleVendors: input.allow_multiple_vendors,
           settlementArrangement: input.settlement_arrangement,
           makerId: actor.id,
@@ -372,7 +380,7 @@ export class PartnersService implements OnModuleInit {
       await this.audit.record(actor, { action: 'partner.configuration_proposed', resourceType: 'PARTNER_CONFIGURATION', resourceId: cfg.id, partnerId, after: input }, tx);
       // Once a partner is live, every configuration change goes through its own maker-checker request.
       if (!['DRAFT', 'ADDITIONAL_INFORMATION_REQUIRED', 'SUBMITTED', 'UNDER_REVIEW'].includes(partner.status)) {
-        await this.approvals.create(tx, { type: 'PARTNER_CONFIG', resourceType: 'PARTNER_CONFIGURATION', resourceId: cfg.id, partnerId, payload: { version: cfg.version }, summary: `Configuration v${cfg.version} for ${partner.tradingName}` }, actor);
+        await this.approvals.create(tx, { type: 'PARTNER_CONFIG', resourceType: 'PARTNER_CONFIGURATION', resourceId: cfg.id, partnerId, payload: { version: cfg.version, annual_profit_rate_percent: input.annual_profit_rate_percent, customer_equity_enabled: input.partial_financing_enabled, permitted_tenors: cfg.permittedTenors }, summary: `Configuration v${cfg.version} for ${partner.tradingName} — ${input.annual_profit_rate_percent}% p.a., tenors up to ${Math.max(...cfg.permittedTenors)} months` }, actor);
       }
       return cfg;
     });

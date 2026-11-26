@@ -7,6 +7,7 @@ export const WEBHOOK_EVENT_TYPES = {
   'application.submitted': 'The application was acknowledged by the ARAF workflow.',
   'application.cancelled': 'The application was cancelled.',
   'application.expired': 'The application expired.',
+  'application.equity_confirmed': 'The merchant confirmed receipt of the customer equity; only the remainder is financed.',
   'financing.approved': 'Financing was approved in the ARAF workflow. NOT a release authorisation.',
   'financing.booked': 'Financing was booked in core banking. NOT a release authorisation.',
   'vendor.payment_pending': 'Vendor payment instruction created.',

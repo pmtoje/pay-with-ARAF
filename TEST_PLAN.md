@@ -15,10 +15,10 @@
 
 ## Commands
 ```bash
-pnpm --filter @araf/business-rules test     # 94 tests
+pnpm --filter @araf/business-rules test     # 110 tests
 pnpm --filter @araf/security test           # 36 tests
 pnpm --filter @araf/integrations test       #  7 tests
-pnpm --filter @araf/api test                # 44 tests (e2e lifecycle + scenarios/security)
+pnpm --filter @araf/api test                # 46 tests (e2e lifecycle + scenarios/security)
 node scripts/scan-secrets.mjs
 ```
 
@@ -27,7 +27,10 @@ node scripts/scan-secrets.mjs
 * Ratio 33.299% / 33.300% within, 33.301% above, exact decimals ✔ · zero/negative income ✔ ·
   zero obligations ✔ · obligations exceeding capacity ✔
 * Missing salary, split salary, duplicates, insufficient history, uncertain classification ✔
-* Tenors 12 → 25%, 13 → 50%, 24 → 50%, 25 unsupported ✔ · schedule reconciles to DSP ✔
+* Per-annum product pricing: 25% p.a. → 6 m 12.5%, 12 m 25%, 18 m 37.5%, 24 m 50%; other product
+  rates; 25 months unsupported; invalid rates rejected ✔ · schedule reconciles to DSP ✔
+* Business owners: capacity = 10% of turnover − obligations; 10.000% within / 10.001% above ✔
+* Equity: ₦5m item − ₦2m equity → ₦3m financed, markup on ₦3m only; minimum/maximum equity ✔
 * Single obligor below / at / above limit, existing exposure, concurrent reservations ✔
   (concurrency additionally end-to-end in SCN 28)
 * Goods release matrix: eligibility only, approved, booked, initiated, failed, unknown, confirmed
@@ -80,11 +83,19 @@ session fixation (session rotation after MFA — code review) · XSS (React esca
 code review; no HTML rendering of user content).
 
 ## Results (latest local run)
-* business-rules 94/94 ✔ · security 36/36 ✔ · integrations 7/7 ✔ · API 44/44 ✔ (11 lifecycle + 33
-  scenario/security) — total **181 passing, 0 failing** (after dependency upgrades).
+* business-rules 110/110 ✔ · security 36/36 ✔ · integrations 7/7 ✔ · API 46/46 ✔ (11 lifecycle + 35
+  scenario/security) — total **199 passing, 0 failing** (2026-11-26).
 * All five web apps pass `next build`; each was exercised in Playwright (Chromium) at mobile and
   desktop widths against the live sandbox API during build-out, plus a final cross-app smoke run.
 * Defects found by the suites and fixed: see `DECISIONS.md` D-020.
+
+## Customer equity, product pricing, business owners (D-023 – D-025)
+SCN: equity required instead of cart revision → bounds enforced → profit on the financed amount →
+equity change withdraws the offer → merchant confirmation only after approval, exact amount,
+idempotent → vendor payment blocked until confirmed, then pays only the financed amount →
+`EQUITY_CONFIRMED` reported to ARAF before payment. SCN: partner at 20% p.a. prices differently;
+tenors above 24 months refused. SCN 14: business owner assessed at 10% of Periculum turnover with
+the SeedFi check on file.
 
 ## ARAF execution reporting (D-013)
 E2E: full ordered report sequence acknowledged by the ARAF simulator · SCN: reporting outage → booking

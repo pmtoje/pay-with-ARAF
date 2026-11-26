@@ -85,6 +85,9 @@ export const ERRORS = {
   PAYMENT_STATUS_UNKNOWN: E(409, 'The payment status is unknown and must be reconciled before any retry.', 'SETTLEMENT'),
   RELEASE_NOT_AUTHORIZED: E(409, 'Goods release has not been authorised for this order.', 'PARTNER'),
   FULFILMENT_DUPLICATE: E(409, 'This fulfilment step was already recorded.', 'PARTNER'),
+  EQUITY_NOT_REQUIRED: E(409, 'This order has no customer equity to confirm.', 'PARTNER'),
+  EQUITY_AMOUNT_MISMATCH: E(422, 'The equity amount does not match the amount the customer agreed to pay.', 'PARTNER'),
+  EQUITY_ALREADY_CONFIRMED: E(409, 'Equity for this order was already confirmed with a different reference.', 'PARTNER'),
   WEBHOOK_URL_UNSAFE: E(422, 'The webhook URL is not permitted. Use a public HTTPS endpoint.', 'PARTNER'),
   PRODUCTION_LOCKED: E(403, 'Production operation is not enabled. Required approvals and integrations are outstanding.', 'SECURITY'),
 } as const satisfies Record<string, ErrorDefinition>;

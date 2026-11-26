@@ -174,6 +174,13 @@ export class CustomerController {
     return this.eligibility.offerOptions(this.appId(req));
   }
 
+  @Post('equity')
+  @HttpCode(200)
+  @Customer()
+  setEquity(@Body() body: unknown, @Ctx() req: AuthedRequest) {
+    return this.eligibility.setEquity(this.appId(req), body, req);
+  }
+
   @Post('offers/select')
   @HttpCode(200)
   @Customer()

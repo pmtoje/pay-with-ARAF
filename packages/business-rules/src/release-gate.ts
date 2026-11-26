@@ -9,6 +9,12 @@ import type { Kobo } from './money';
  * the API re-evaluates it inside the same database transaction that creates the authorisation.
  */
 
+/**
+ * Customer equity is paid to the merchant after the Bank approves the financing and before the
+ * Bank pays the vendor. The Bank never pays the vendor while equity is outstanding.
+ */
+export const EQUITY_PAYABLE_STATES = ['FINANCING_APPROVED', 'DOCUMENTATION_PENDING', 'MANDATE_PENDING', 'BOOKING_PENDING', 'FINANCING_BOOKED'] as const;
+
 export type PaymentStatus =
   | 'NOT_INITIATED'
   | 'PENDING_APPROVAL'

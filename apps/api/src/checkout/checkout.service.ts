@@ -159,6 +159,8 @@ export class CheckoutService {
           purchaseAmountKobo: BigInt(input.amount),
           vendorId: vendors[0].id,
           creditPolicyVersionId: policyVersion.id,
+          // Product pricing is fixed for the life of the application.
+          annualProfitRateBps: config.annualProfitRateBps,
           revisesApplicationId: revises?.applicationId,
           expiresAt,
         },

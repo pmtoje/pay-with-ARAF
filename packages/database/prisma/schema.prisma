@@ -333,7 +333,9 @@ model PartnerConfiguration {
   eligibleCategories          String[]
   applicationExpiryMinutes    Int      @default(1440)
   orderReservationMinutes     Int      @default(4320)
-  partialFinancingEnabled     Boolean  @default(false)
+  partialFinancingEnabled     Boolean  @default(false) // customer equity (down payment to the merchant) allowed
+  /// Product pricing: profit rate per annum in basis points (2500 = 25% p.a.). Set per partner product, maker-checker approved.
+  annualProfitRateBps         Int      @default(2500)
   allowMultipleVendors        Boolean  @default(false)
   settlementArrangement       String   @default("DIRECT_TO_VENDOR")
   sandboxEnabled              Boolean  @default(true)
@@ -601,8 +603,13 @@ model FinancingApplication {
   purchaseAmountKobo        BigInt
   eligibleAmountKobo        BigInt?
   financingAmountKobo       BigInt?
+  /// Customer equity paid to the merchant towards the item; financed = purchase − equity.
   contributionAmountKobo    BigInt            @default(0)
   contributionVerified      Boolean           @default(false)
+  contributionReference     String?           // merchant's receipt reference for the equity payment
+  contributionConfirmedAt   DateTime?
+  /// Product profit rate p.a. (bps) snapshotted from the partner's active configuration at checkout.
+  annualProfitRateBps       Int               @default(2500)
   selectedAccountId         String?
   vendorId                  String
   creditPolicyVersionId     String
@@ -951,7 +958,8 @@ model FinancingOffer {
   financingAmountKobo BigInt
   contributionKobo    BigInt
   tenorMonths         Int
-  markupBps           Int
+  markupBps           Int       // total markup over the tenor, bps (rounded, display only)
+  annualProfitRateBps Int       @default(2500) // profit is priced from this exact rate
   profitKobo          BigInt
   deferredSalePriceKobo BigInt
   monthlyRepaymentKobo BigInt
