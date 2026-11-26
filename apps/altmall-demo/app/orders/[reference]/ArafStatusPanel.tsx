@@ -4,6 +4,7 @@ import { syncOrderFromAraf, type OrderRow } from '@/lib/orders';
 import { ARAF_OPEN, MILESTONES, PAYMENT_METHOD_LABEL, SHOPPER_ACTION, TERMINAL_NEGATIVE, milestoneIndex, statusCopy } from '@/lib/statuses';
 import { PayWithArafMark } from '@/components/brand';
 import { AutoRefresh, PayAnotherWay, PayEquity, RefreshButton, RetryAraf } from './OrderActions';
+import { BNPL_LABEL, OpenArafCheckout } from '@/components/ArafEmbed';
 
 const toneBox: Record<string, string> = {
   gold: 'border-gold/40 bg-gold-soft/40',
@@ -14,7 +15,7 @@ const toneBox: Record<string, string> = {
   neutral: 'border-border bg-surface-2/50',
 };
 
-export async function ArafStatusPanel({ order: initial, fromAraf }: { order: OrderRow; fromAraf: boolean }) {
+export async function ArafStatusPanel({ order: initial, fromAraf, autoOpen = false }: { order: OrderRow; fromAraf: boolean; autoOpen?: boolean }) {
   const { order, remote, error } = await syncOrderFromAraf(initial);
   const status = order.araf_status;
   const copy = statusCopy(status);
@@ -39,7 +40,7 @@ export async function ArafStatusPanel({ order: initial, fromAraf }: { order: Ord
       <div className="space-y-6 p-5">
         {fromAraf && !error && (
           <p className="text-sm text-muted" role="status">
-            Welcome back. We confirmed this status directly with Pay with ARAF — returning from the Pay with ARAF page is never treated as proof of approval or payment.
+            We confirmed this status directly with Pay with ARAF — closing the Pay with ARAF panel is never treated as proof of approval or payment.
           </p>
         )}
         {error && (
@@ -57,14 +58,10 @@ export async function ArafStatusPanel({ order: initial, fromAraf }: { order: Ord
           </p>
           {order.cancel_reason && <p className="mt-2 text-sm text-fg">AltMall cancelled this order: {order.cancel_reason}. Nothing further is needed from you.</p>}
           {!paidElsewhere && order.araf_checkout_url && status && SHOPPER_ACTION.includes(status) && (
-            <a href={order.araf_checkout_url} className="btn-araf mt-4">
-              Continue your application
-            </a>
+            <OpenArafCheckout checkoutUrl={order.araf_checkout_url} autoOpen={autoOpen} label={status === 'CUSTOMER_ACTION_REQUIRED' && !remote?.application?.timeline?.length ? `${BNPL_LABEL} — ${formatNaira(remote?.application?.purchase_amount ?? 0)}` : 'Continue my Buy Now Pay Later application'} />
           )}
-          {!paidElsewhere && order.araf_checkout_url && status && ARAF_OPEN.includes(status) && !SHOPPER_ACTION.includes(status) && (
-            <a href={order.araf_checkout_url} className="btn-outline mt-4 h-11 text-sm">
-              View in Pay with ARAF
-            </a>
+          {!paidElsewhere && order.araf_checkout_url && status && !TERMINAL_NEGATIVE.includes(status) && !SHOPPER_ACTION.includes(status) && (
+            <OpenArafCheckout checkoutUrl={order.araf_checkout_url} autoOpen={autoOpen} variant="secondary" label="View my application" />
           )}
           {!paidElsewhere && !status && order.status === 'FINANCING_FAILED' && (
             <p className="mt-2 text-sm text-warning">Pay with ARAF couldn’t be started for this order.</p>

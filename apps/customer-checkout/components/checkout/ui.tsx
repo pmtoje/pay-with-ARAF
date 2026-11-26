@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, Button, Skeleton, Spinner, cn } from '@araf/ui';
 import { describeError, safeHref } from '@/lib/api';
+import { closeEmbed, isEmbedded } from '@/lib/embed';
 
 export function StepCard({ eyebrow, title, description, children, footer, className }: { eyebrow?: ReactNode; title: ReactNode; description?: ReactNode; children?: ReactNode; footer?: ReactNode; className?: string }) {
   return (
@@ -104,14 +105,25 @@ export function ChoiceCard({ name, value, checked, onChange, title, description,
   );
 }
 
-export function MerchantLink({ href, children, variant = 'secondary', block }: { href: string | null | undefined; children: ReactNode; variant?: 'primary' | 'secondary' | 'gold'; block?: boolean }) {
+/**
+ * Back to the merchant. Embedded (inside the merchant's own page) it closes the panel instead of
+ * navigating, so the shopper never leaves the merchant's website.
+ */
+export function MerchantLink({ href, children, variant = 'secondary', block, reason = 'return' }: { href: string | null | undefined; children: ReactNode; variant?: 'primary' | 'secondary' | 'gold'; block?: boolean; reason?: 'return' | 'cancel' | 'equity' }) {
   const url = safeHref(href);
-  if (!url) return null;
   const styles = {
     primary: 'bg-ink text-ink-contrast hover:opacity-90 border-transparent',
     gold: 'bg-gold text-white hover:bg-gold-strong border-transparent dark:text-[#0c0c0d]',
     secondary: 'bg-surface text-fg border-border-strong hover:bg-surface-2',
   }[variant];
+  if (isEmbedded()) {
+    return (
+      <button type="button" onClick={() => closeEmbed(reason)} className={cn('inline-flex min-h-[44px] items-center justify-center gap-2 rounded-md border px-5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg', styles, block && 'w-full')}>
+        {children}
+      </button>
+    );
+  }
+  if (!url) return null;
   return (
     <a href={url} className={cn('inline-flex h-11 items-center justify-center gap-2 rounded-md border px-5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg', styles, block && 'w-full')}>
       {children}

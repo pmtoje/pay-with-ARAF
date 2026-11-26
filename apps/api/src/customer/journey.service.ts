@@ -113,6 +113,8 @@ export class JourneyService {
   async summary(sessionId: string) {
     const { session, app } = await this.appBySession(sessionId);
     const partner = await this.prisma.partner.findUniqueOrThrow({ where: { id: session.partnerId }, select: { tradingName: true, websiteUrl: true } });
+    // Websites allowed to embed this checkout (approved partner origins for this environment).
+    const embedOrigins = (await this.prisma.partnerDomain.findMany({ where: { partnerId: session.partnerId, environment: session.environment, kind: 'RETURN_URL_ORIGIN', approved: true }, select: { value: true } })).map((d) => d.value);
     const { EXPIRABLE_APPLICATION_STATES } = await import('@araf/business-rules');
     const expired = session.status === 'SUPERSEDED' || (EXPIRABLE_APPLICATION_STATES.includes(app.status as never) && (session.expiresAt.getTime() < Date.now() || ['EXPIRED', 'CANCELLED'].includes(session.status)));
     return {
@@ -124,6 +126,7 @@ export class JourneyService {
       items: session.order.items.map((i) => ({ name: i.name, quantity: i.quantity, unit_amount: n(i.unitAmountKobo), line_amount: n(i.lineAmountKobo), category: i.category })),
       cancel_url: session.cancelUrl,
       return_url: session.returnUrl,
+      embed_origins: embedOrigins,
       expires_at: session.expiresAt,
       expired,
       superseded_by: session.supersededById,
@@ -154,7 +157,11 @@ export class JourneyService {
       if (session.status === 'CREATED') await tx.checkoutSession.update({ where: { id: session.id }, data: { status: 'OPEN', openedAt: new Date() } });
       if (app.status === 'CREATED') await this.state.transitionApplication(tx, app, 'IDENTITY_PENDING', { ...req.actor, type: 'CUSTOMER' });
     });
-    res.cookie(CUSTOMER_COOKIE, token, { httpOnly: true, secure: this.config.COOKIE_SECURE, sameSite: 'lax', path: '/', maxAge: 24 * 3600_000 });
+    // Over HTTPS the checkout may be embedded in a merchant page (a cross-site iframe), so the cookie
+    // is SameSite=None and Partitioned (CHIPS): it is only ever sent to this checkout inside THAT
+    // merchant's page and cannot be used for tracking across sites. CSRF protection is the
+    // per-session header token, not SameSite. Local HTTP development keeps SameSite=Lax.
+    res.cookie(CUSTOMER_COOKIE, token, this.config.COOKIE_SECURE ? { httpOnly: true, secure: true, sameSite: 'none', partitioned: true, path: '/', maxAge: 24 * 3600_000 } : { httpOnly: true, secure: false, sameSite: 'lax', path: '/', maxAge: 24 * 3600_000 });
     return { csrf_token: csrf, identity_verified: !['CREATED', 'IDENTITY_PENDING'].includes(app.status) };
   }
 

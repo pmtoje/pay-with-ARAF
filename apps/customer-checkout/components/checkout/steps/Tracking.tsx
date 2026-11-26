@@ -115,8 +115,8 @@ function EquityPayment() {
       <p>Your financing is approved. Pay your agreed equity directly to {summary.partner.name}. Once they confirm it, the Bank pays the vendor the financed {formatNaira(eq.financed_amount ?? 0)}.</p>
       {eq.pay_url && (
         <div className="mt-3">
-          <MerchantLink href={eq.pay_url} variant="primary">
-            Pay equity at {summary.partner.name}
+          <MerchantLink href={eq.pay_url} variant="primary" reason="equity">
+            Pay {formatNaira(eq.amount)} equity at {summary.partner.name}
           </MerchantLink>
         </div>
       )}
@@ -309,7 +309,7 @@ function DocumentSigning() {
     <ActionBox title="Review and sign your documents">
       <p className="text-sm text-muted">Your financing has been approved. Please read each document, then sign them together with a one-time code sent to your phone.</p>
       <DocLinks types={['PROMISE_TO_PURCHASE', 'OFFER_LETTER']} />
-      <OtpConfirm purpose="DOCUMENT_SIGNING" endpoint="documents/sign" cta="Sign with one-time code" confirmLabel="Sign documents" />
+      <OtpConfirm purpose="DOCUMENT_SIGNING" endpoint="documents/sign" cta="Send code to sign my promise to purchase and offer letter" confirmLabel="Sign my documents" />
       <Why>Signing the promise to purchase asks the Bank to buy the item for you. The sale to you happens later, only after the Bank owns the item.</Why>
     </ActionBox>
   );
@@ -344,11 +344,11 @@ function MandateSetup() {
           })
         }
       >
-        {failed ? 'Try again with Remita' : awaiting ? 'Continue to Remita' : 'Set up mandate with Remita'}
+        {`${failed ? 'Try again: authorise' : awaiting ? 'Continue: authorise' : 'Authorise'} ${view.offer ? formatNaira(view.offer.monthly_repayment) : 'your'} monthly direct debit with Remita`}
       </Button>
       {awaiting && (
         <Button variant="ghost" block loading={busy === 'verify'} onClick={() => void run('verify', () => api.post(`${base}/mandate/verify`))}>
-          I’ve authorised it — check now
+          I’ve authorised it — check my mandate now
         </Button>
       )}
     </ActionBox>
@@ -374,8 +374,8 @@ function SaleAgreement() {
       <OtpConfirm
         purpose="SALE_CONTRACT"
         endpoint="sale-contract/sign"
-        cta="Sign with one-time code"
-        confirmLabel="Sign sale agreement"
+        cta={`Send code to sign the sale agreement (${view.offer ? formatNaira(view.offer.deferred_sale_price) : 'deferred sale price'})`}
+        confirmLabel={`Sign and buy for ${view.offer ? formatNaira(view.offer.deferred_sale_price) : 'the agreed price'}`}
         onPreconditions={(e) => {
           if (errorCode(e) === 'PRECONDITIONS_NOT_MET') {
             setNotReady(true);
@@ -421,7 +421,7 @@ export function EndedStep() {
         <p className="text-sm leading-relaxed text-muted">
           Thank you for considering Pay with ARAF. You can return to {summary.partner.name} and choose another payment method to complete your order. This decision applies to this application only.
         </p>
-        <MerchantLink href={summary.cancel_url} variant="primary" block>
+        <MerchantLink href={summary.cancel_url} variant="primary" block reason="cancel">
           Choose another payment method
         </MerchantLink>
       </StepCard>
@@ -432,7 +432,7 @@ export function EndedStep() {
       title={s === 'CANCELLED' ? 'Application cancelled' : 'This application has expired'}
       description={s === 'CANCELLED' ? 'Your financing application has been cancelled. Nothing further is needed from you.' : 'This application expired before it was completed. Please start again from the merchant.'}
     >
-      <MerchantLink href={summary.cancel_url} variant="primary" block>
+      <MerchantLink href={summary.cancel_url} variant="primary" block reason="cancel">
         Back to {summary.partner.name}
       </MerchantLink>
     </StepCard>

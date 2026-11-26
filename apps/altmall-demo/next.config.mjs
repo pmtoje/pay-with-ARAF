@@ -1,9 +1,12 @@
 /** @type {import('next').NextConfig} */
 const API_URL = process.env.ARAF_API_URL ?? 'http://localhost:4000';
 
+// The Bank's checkout origin: AltMall loads the Pay with ARAF SDK from it and frames its checkout.
+const CHECKOUT_ORIGIN = (process.env.ARAF_CHECKOUT_ORIGIN ?? 'http://localhost:3001').replace(/\/$/, '');
+
 const securityHeaders = [
   // Inline scripts are limited to Next's runtime and the theme bootstrap; no third-party origins.
-  { key: 'Content-Security-Policy', value: `default-src 'self'; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'` },
+  { key: 'Content-Security-Policy', value: `default-src 'self'; script-src 'self' 'unsafe-inline' ${CHECKOUT_ORIGIN}${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}; frame-src ${CHECKOUT_ORIGIN}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'` },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

@@ -295,6 +295,26 @@ describe('Sandbox scenarios and security controls', () => {
     await c.post('/cancel');
    }, 180_000);
 
+  it('slow network: a retried customer action with the same Idempotency-Key is replayed, never applied twice', async () => {
+    const { c, sessionId } = await start('22200000001', '1990-04-12');
+    const summary = (await request(h.http).get(`/api/checkout/sessions/${sessionId}`)).body;
+    expect(summary.embed_origins).toContain('http://localhost:3005'); // approved website may embed the checkout
+    const accounts = await c.get('/accounts');
+    const acct = accounts.body.accounts.find((x: { eligible: boolean }) => x.eligible);
+    const first = await c.post('/accounts/select', { account_id: acct.id }).set('Idempotency-Key', 'retry-key-000001');
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    // The response was "lost"; the browser retries with the SAME key → identical replayed result.
+    const replay = await c.post('/accounts/select', { account_id: acct.id }).set('Idempotency-Key', 'retry-key-000001');
+    expect(replay.status).toBe(200);
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(replay.body.state).toBe(first.body.state);
+    // Re-using the key for a different request is refused.
+    expect((await c.post('/accounts/select', { account_id: '00000000-0000-0000-0000-000000000000' }).set('Idempotency-Key', 'retry-key-000001')).body.error.code).toBe('IDEMPOTENCY_KEY_REUSED');
+    // Without the key, a duplicate is still stopped by the state machine (defence in depth).
+    expect((await c.post('/accounts/select', { account_id: acct.id })).body.error.code).toBe('INVALID_STATE');
+    await c.post('/cancel');
+  });
+
   it('uncertain salary classification → review, not decline', async () => {
     const { c, ref } = await start('22200000015', '1992-12-12');
     await toStatement(c);

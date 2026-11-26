@@ -333,6 +333,20 @@ export class RateLimitService implements OnModuleDestroy {
     await this.redis.del(`rl:${key}`).catch(() => undefined);
   }
 
+  // Small key/value helpers (customer idempotency). Callers treat Redis failures as "no record".
+  async kvGet(key: string): Promise<string | null> {
+    return this.redis.get(key).catch(() => null);
+  }
+  async kvSetNx(key: string, value: string, ttlSeconds: number): Promise<boolean | null> {
+    return this.redis.set(key, value, 'EX', ttlSeconds, 'NX').then((r) => r === 'OK').catch(() => null);
+  }
+  async kvSet(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.redis.set(key, value, 'EX', ttlSeconds).catch(() => undefined);
+  }
+  async kvDel(key: string): Promise<void> {
+    await this.redis.del(key).catch(() => undefined);
+  }
+
   async ping(): Promise<boolean> {
     return (await this.redis.ping().catch(() => 'ERR')) === 'PONG';
   }

@@ -11,6 +11,7 @@ import { SandboxTools } from './SandboxTools';
 import { StepRouter } from './StepRouter';
 import { ErrorNotice, MerchantLink, SecurityNote } from './ui';
 import { CancelApplication } from './steps/Cancel';
+import { initEmbed, isEmbedded, post } from '@/lib/embed';
 
 export type ReturnAction =
   | { kind: 'account-opening'; state: string | null }
@@ -43,7 +44,10 @@ type Phase = { kind: 'loading' } | { kind: 'ready' } | { kind: 'expired'; reason
 
 export function CheckoutApp({ sessionId, returnAction }: { sessionId: string; returnAction?: ReturnAction }) {
   const tokenRef = useRef<string | null>(null);
-  const api: Api = useMemo(() => createApiClient({ csrfToken: () => tokenRef.current }), []);
+  // Writes carry an Idempotency-Key and are retried with the same key on slow / dropped connections.
+  const api: Api = useMemo(() => createApiClient({ csrfToken: () => tokenRef.current, retryWrites: { attempts: 4, timeoutMs: 25_000 } }), []);
+  const [offline, setOffline] = useState(false);
+  const embedded = useMemo(() => isEmbedded(), []);
   const base = baseOf(sessionId);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [view, setView] = useState<View | null>(null);
@@ -146,6 +150,35 @@ export function CheckoutApp({ sessionId, returnAction }: { sessionId: string; re
     },
     [api, base, openSession],
   );
+
+  // Connectivity: tell the customer when they are offline; re-read the true state when back online.
+  useEffect(() => {
+    const on = () => {
+      setOffline(false);
+      void refresh();
+    };
+    const off = () => setOffline(true);
+    setOffline(typeof navigator !== 'undefined' && navigator.onLine === false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, [refresh]);
+
+  // Embedded in a merchant page: learn the (approved) parent origin, then report status only.
+  const [parentKnown, setParentKnown] = useState(0);
+  useEffect(() => {
+    if (!embedded || !summary) return;
+    return initEmbed(summary.embed_origins ?? [], () => setParentKnown((n) => n + 1));
+  }, [embedded, summary]);
+  useEffect(() => {
+    if (!embedded || !view) return;
+    post('araf:status', { application_reference: view.application_reference, stage: view.status.stage, label: view.status.label });
+    const outcome = ['DECLINED'].includes(view.state) ? 'DECLINED' : ['CANCELLED', 'EXPIRED'].includes(view.state) ? view.state : view.state === 'ARAF_SUBMITTED' || view.state === 'ARAF_UNDER_REVIEW' ? 'SUBMITTED' : ['GOODS_DELIVERED', 'COMPLETED'].includes(view.state) ? 'DELIVERED' : null;
+    if (outcome) post('araf:complete', { application_reference: view.application_reference, outcome });
+  }, [embedded, view?.state, view?.status.stage, parentKnown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyView = useCallback((v: View) => setView(v), []);
   const notifyOtpSent = useCallback(() => setOtpTick((t) => t + 1), []);
@@ -280,6 +313,11 @@ export function CheckoutApp({ sessionId, returnAction }: { sessionId: string; re
               <p className="sr-only" role="status" aria-live="polite">
                 {view.status.label}. {view.status.description}
               </p>
+              {offline && (
+                <Alert tone="warning" title="You’re offline">
+                  Your progress is saved with the Bank. We’ll pick up where you left off as soon as your connection is back — there’s no need to start again.
+                </Alert>
+              )}
               {flash && (
                 <div className="relative">
                   <Alert tone={flash.tone} title={flash.title} className="pr-12">

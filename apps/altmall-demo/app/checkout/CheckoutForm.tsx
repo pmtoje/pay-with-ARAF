@@ -11,6 +11,7 @@ import { ProductArt } from '@/components/ProductArt';
 import { PayWithArafMark } from '@/components/brand';
 import { placeOrder, type PaymentMethod } from '@/app/actions/checkout';
 import { arafEligibility } from '../cart/CartView';
+import { BNPL_LABEL } from '@/components/ArafEmbed';
 
 type Errors = Partial<Record<'name' | 'phone' | 'address' | 'city' | 'state' | 'method', string>>;
 
@@ -205,11 +206,11 @@ export function CheckoutForm({ defaults }: { defaults: { name: string; phone: st
               setMethod(v);
               if (submitted) setErrors(validate(values, v));
             }}
-            title={<PayWithArafMark size="sm" />}
-            badge={<span className="text-xs font-medium text-muted">Financing by The Alternative Bank</span>}
+            title={<span className="font-semibold text-fg">{BNPL_LABEL}</span>}
+            badge={<PayWithArafMark size="sm" />}
           >
             {elig.ok ? (
-              <>Spread the cost with non-interest (Murabaha) financing. You’ll continue on The Alternative Bank’s secure Pay with ARAF page to check eligibility — subject to approval. AltMall never sees your credit details.</>
+              <>Spread the cost with non-interest (Murabaha) financing from The Alternative Bank. You stay on AltMall — the Bank’s secure checkout opens right here to check eligibility, subject to approval. AltMall never sees your credit details.</>
             ) : (
               <span className="text-warning">{elig.reasons.join(' ')}</span>
             )}
@@ -273,7 +274,7 @@ export function CheckoutForm({ defaults }: { defaults: { name: string; phone: st
             </div>
           </dl>
           <Button type="submit" size="lg" block className="mt-5" loading={busy || redirecting}>
-            {redirecting ? (method === 'araf' ? 'Opening Pay with ARAF…' : 'Placing order…') : method === 'araf' ? 'Continue to Pay with ARAF' : 'Place order'}
+            {redirecting ? (method === 'araf' ? 'Opening secure checkout…' : 'Placing order…') : method === 'araf' ? `${BNPL_LABEL} — ${formatNaira(cart.subtotalKobo)}` : method ? `Place order and pay ${formatNaira(cart.subtotalKobo)}` : 'Choose a payment method'}
           </Button>
           <p className="mt-3 text-center text-xs text-subtle">
             <Link href="/cart" className="hover:text-fg">

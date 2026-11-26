@@ -165,6 +165,7 @@ export interface Integration {
   credentials: Credential[];
   webhook_endpoints: WebhookEndpoint[];
   approved_return_origins: string[];
+  checkout: { sdk_url: string; checkout_origin: string; button_label: string; embed_origins: string[] };
   configuration: {
     id: string;
     version: number;

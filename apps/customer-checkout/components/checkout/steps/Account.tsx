@@ -97,7 +97,10 @@ export function AccountStep() {
         <>
           <ErrorNotice error={error} />
           <Button size="lg" block disabled={!selected || !!opening.busy} loading={busy === 'select'} onClick={() => void run('select', () => api.post(`${base}/accounts/select`, { account_id: selected }))}>
-            Use this account
+            {(() => {
+              const a = accounts.find((x) => x.id === selected);
+              return a ? `Use ${a.account_number} for my repayments` : 'Choose an account for repayments';
+            })()}
           </Button>
         </>
       )}

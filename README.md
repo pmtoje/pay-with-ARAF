@@ -52,7 +52,7 @@ Full stack in containers: `docker compose up --build` (see `DEPLOYMENT.md`).
 ## Demonstration script (Definition of Done)
 1. `node scripts/demo-bootstrap.mjs` — onboarding officer creates AltMall; partner approving
    officer approves (maker-checker); AltMall admin enrols MFA; sandbox key + webhook configured.
-2. AltMall (3005): add a smartphone, checkout, choose **Pay with ARAF** → hosted checkout (3001).
+2. AltMall (3005): add a smartphone, checkout, choose **Buy Now Pay Later with AltBank** → the Bank checkout opens in a panel on AltMall (embedded, no redirect).
 3. Accept consents, BVN `22200000001`, DOB `1990-04-12`, OTP from the sandbox drawer/inbox.
 4. Select the AltBank account → *Salary earner* → *Use my AltBank statement* → offer appears →
    choose tenor → accept.
@@ -71,7 +71,7 @@ The same flow is automated in `apps/api/test/e2e-journey.test.ts`.
 ```
 apps/        api (NestJS API + worker) · customer-checkout · partner-portal · admin-portal · developer-portal · altmall-demo
 packages/    business-rules · security · database · integrations · types · ui · design-tokens
-documentation/ FRONTEND_GUIDE · UAT_PACK · SECURITY_ASSESSMENT · openapi.yaml
+documentation/ FRONTEND_GUIDE · UAT_PACK · SECURITY_ASSESSMENT · FAILURE_HANDLING · openapi.yaml
 infrastructure/ docker
 scripts/     generate-env · demo-bootstrap · totp · scan-secrets
 ```
@@ -82,7 +82,7 @@ The worker shares the API codebase (`apps/api/src/worker.ts`); see `DECISIONS.md
 pnpm --filter @araf/business-rules test   # 110
 pnpm --filter @araf/security test         # 36
 pnpm --filter @araf/integrations test     #  7
-pnpm --filter @araf/api test              # 46 (end-to-end lifecycle + scenarios + security)
+pnpm --filter @araf/api test              # 47 (end-to-end lifecycle + scenarios + security)
 ```
 
 ## Documentation

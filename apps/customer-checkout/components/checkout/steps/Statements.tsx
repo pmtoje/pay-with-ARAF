@@ -121,7 +121,7 @@ export function StatementsStep() {
         <div className="space-y-3">
           <ErrorNotice error={error} />
           <Button size="lg" block loading={busy === 'altbank'} onClick={() => void run('altbank', () => api.post(`${base}/statements/altbank`))}>
-            Share my Alternative Bank statement
+            Share my Alternative Bank statement and check affordability
           </Button>
         </div>
       )}
@@ -147,7 +147,7 @@ export function StatementsStep() {
               })
             }
           >
-            Continue to connect my bank
+            Connect my other bank with Mono (read-only)
           </Button>
         </div>
       )}

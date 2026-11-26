@@ -176,6 +176,28 @@ policy versions are read as their per-annum equivalent so in-flight applications
 accepted offers keep the amounts priced at the time. Rates remain PROPOSED until Credit Risk /
 Shariah approve them.
 
+### D-026 — Embedded checkout: shoppers start and end on the merchant's website
+Requested 2026-11-26. Merchants load `/v1/araf.js` from the Bank's checkout origin and open the
+hosted checkout in a sandboxed iframe panel on their own page (`ArafCheckout.open`). Framing is
+allowed only for the partner's approved origins (per-session CSP `frame-ancestors`); the iframe
+cannot navigate the merchant page; postMessage events carry status only and are verified by
+origin and source; over HTTPS the customer cookie is `SameSite=None; Secure; Partitioned` (CHIPS).
+Merchant returns become "close panel" instead of navigation. The payment-screen call to action is
+**"Buy Now Pay Later with AltBank"**. Integration setup lives in the Partner portal (self-service:
+button, snippets, approved websites); the Bank admin portal shows each partner's integration and
+controls which websites are approved (maker-checker). **Production note:** real Remita/Mono pages
+may refuse framing — their live adapters must open in a pop-up and return to the panel.
+
+### D-027 — Every button states the action (and amount)
+Primary calls to action say exactly what happens, with the amount where there is one (e.g.
+"Accept ₦93,750.00/month × 6 and submit to the Bank", "Authorise ₦93,750.00 monthly direct debit
+with Remita", "Sign and buy for ₦562,500.00", "Pay ₦145,000.00 equity at AltMall").
+
+### D-028 — Safe retries on slow networks
+Customer writes are idempotent (`Idempotency-Key`, Redis replay for 24 h, scoped to the browser
+session) and retried with the same key; on uncertainty the UI re-reads server state. See
+`documentation/FAILURE_HANDLING.md`.
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable

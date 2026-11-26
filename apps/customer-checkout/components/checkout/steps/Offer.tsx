@@ -40,7 +40,7 @@ function CartRevision() {
       <p className="text-sm leading-relaxed text-muted">
         Paying part of the price as equity isn’t available for this purchase. To continue with Pay with ARAF, return to {summary.partner.name} and revise your cart to{max !== null ? ` ${formatNaira(max)} or less` : ' a lower amount'}. Your verification and assessment can be reused while they remain valid, so you won’t have to start over.
       </p>
-      <MerchantLink href={summary.cancel_url} variant="primary" block>
+      <MerchantLink href={summary.cancel_url} variant="primary" block reason="cancel">
         Revise my cart at {summary.partner.name}
       </MerchantLink>
     </StepCard>
@@ -176,7 +176,10 @@ function TenorComparison({ onBack, onSelected, equityChosen, onEquityDone, onCha
                 })
               }
             >
-              {tenor ? `Continue with ${tenor} months` : 'Choose a term'}
+              {(() => {
+                const o = data.options.find((x) => x.tenor_months === tenor);
+                return o ? `Get my offer: ${formatNaira(o.monthly_repayment)}/month for ${o.tenor_months} months` : 'Choose a repayment term';
+              })()}
             </Button>
           </div>
         </>
@@ -294,7 +297,7 @@ function OfferReview({ onChange }: { onChange: () => void }) {
         <ErrorNotice error={error} />
       )}
       <Button size="lg" block disabled={!accept || expired} loading={busy === 'accept'} onClick={() => void run('accept', () => api.post(`${base}/offers/accept`, { offer_id: offer.id, accept_terms: true, share_status_with_merchant: share }))}>
-        Accept and submit application
+        {`Accept ${formatNaira(offer.monthly_repayment)}/month × ${offer.tenor_months} and submit to the Bank`}
       </Button>
     </StepCard>
   );

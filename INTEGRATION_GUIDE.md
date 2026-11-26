@@ -7,7 +7,12 @@
    Store it in your server secrets; never in browsers or mobile apps.
 2. **Webhook endpoint.** In *Integration → Webhooks* add your HTTPS endpoint and store the
    signing secret (`whsec_…`). Subscribe to all events or a subset.
-3. **Checkout.** When the shopper chooses *Pay with ARAF*, your **server** calls
+3. **Checkout (embedded — recommended).** Show **"Buy Now Pay Later with AltBank"** on your payment
+   screen (`ArafCheckout.button` from `/v1/araf.js`, or your own button with the amount). Your server
+   creates the session (below) and your page calls `ArafCheckout.open({ checkoutUrl })`: the Bank's
+   checkout opens in a panel on your page and the shopper never leaves your website. Your website
+   origin must be approved by the Bank. A plain redirect to `checkout_url` also works.
+   When the shopper chooses it, your **server** calls
    `POST /api/v1/checkout/sessions` with the cart snapshot (integer kobo, single approved vendor,
    approved `return_url` / `cancel_url` origins) and an `Idempotency-Key` derived from your order
    reference. Redirect the shopper to `checkout_url`.

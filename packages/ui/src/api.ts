@@ -30,10 +30,47 @@ export interface ApiClientOptions {
   /** Explicit CSRF token (e.g. the hosted checkout keeps it in memory). */
   csrfToken?: () => string | null;
   onUnauthenticated?: (err: ApiError) => void;
+  /**
+   * Safe retries for state-changing requests on slow networks: each POST carries an
+   * Idempotency-Key, and timeouts / dropped connections / 5xx / IDEMPOTENCY_IN_PROGRESS are retried
+   * with the SAME key so the server can replay the first result instead of acting twice.
+   */
+  retryWrites?: { attempts?: number; timeoutMs?: number };
 }
+
+const newKey = () => {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+};
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Thrown when a write could not be confirmed after retries — the caller should re-read state. */
+export const NETWORK_UNCERTAIN = 'NETWORK_UNCERTAIN';
 
 export function createApiClient(opts: ApiClientOptions = {}) {
   async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
+    const retry = opts.retryWrites;
+    if (!retry || method === 'GET') return once<T>(method, path, body, init);
+    const key = newKey();
+    const attempts = retry.attempts ?? 4;
+    for (let i = 0; ; i++) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), retry.timeoutMs ?? 25_000);
+      try {
+        return await once<T>(method, path, body, { ...init, signal: ctrl.signal, headers: { ...(init.headers as Record<string, string> | undefined), 'Idempotency-Key': key } });
+      } catch (e) {
+        const transient = !(e instanceof ApiError) || e.status >= 500 || e.code === 'IDEMPOTENCY_IN_PROGRESS';
+        if (!transient) throw e;
+        if (i + 1 >= attempts) throw new ApiError(0, NETWORK_UNCERTAIN, 'We could not confirm this step because the connection is slow or was interrupted.');
+        await sleep(Math.min(8000, 1000 * 2 ** i));
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  async function once<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
     if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
@@ -45,6 +82,7 @@ export function createApiClient(opts: ApiClientOptions = {}) {
       method,
       credentials: 'same-origin',
       cache: 'no-store',
+      signal: init.signal,
       headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
     });

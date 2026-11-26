@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Alert, Button } from '@araf/ui';
 import { payAnotherWay, payEquity, retryAraf } from '@/app/actions/checkout';
+import { useArafCheckout } from '@/components/ArafEmbed';
 
 /** Re-fetch the server-confirmed status periodically (bounded), pausing when the tab is hidden. */
 export function AutoRefresh({ intervalMs, maxRuns = 45 }: { intervalMs: number; maxRuns?: number }) {
@@ -102,6 +103,7 @@ export function PayAnotherWay({ reference }: { reference: string }) {
 }
 
 export function RetryAraf({ reference }: { reference: string }) {
+  const { open: openEmbed } = useArafCheckout();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -115,7 +117,10 @@ export function RetryAraf({ reference }: { reference: string }) {
           setError(null);
           try {
             const r = await retryAraf(reference);
-            if (r.ok) window.location.assign(r.redirect);
+            if (r.ok) {
+              await openEmbed(r.redirect);
+              setBusy(false);
+            }
             else {
               setError(r.message);
               setBusy(false);

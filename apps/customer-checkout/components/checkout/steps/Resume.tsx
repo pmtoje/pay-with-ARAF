@@ -74,7 +74,7 @@ export function ResumeStep() {
           </div>
           <ErrorNotice error={error} />
           <Button size="lg" block loading={busy === 'send'} onClick={() => void send()}>
-            Send me a code
+            Send a code to my BVN-linked phone
           </Button>
         </div>
       ) : (
@@ -86,7 +86,7 @@ export function ResumeStep() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <ResendButton cooldown={cooldown} busy={busy === 'send'} onResend={() => void send()} />
             <Button type="submit" size="lg" loading={busy === 'verify'} disabled={code.length !== 6}>
-              Continue
+              Verify code and continue my application
             </Button>
           </div>
           <ErrorNotice error={error} />

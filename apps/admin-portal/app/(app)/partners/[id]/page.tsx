@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Alert, Badge, Button, Card, DataTable, EmptyState, KeyValue, LoadingBlock, PageHeader, StatusBadge, Tabs, Timeline, formatDate, formatDateTime, humanize, statusTone } from '@araf/ui';
+import { Alert, Badge, BnplButtonPreview, Button, Card, DataTable, EmbedFlow, EmptyState, KeyValue, LoadingBlock, PageHeader, StatusBadge, Tabs, Timeline, formatDate, formatDateTime, humanize, statusTone } from '@araf/ui';
 import { api } from '@/lib/api';
 import { useApi } from '@/lib/hooks';
 import { useSession } from '@/lib/session';
@@ -178,6 +178,33 @@ function Partner() {
         {tab === 'integration' && (
           <>
             <Alert tone="info">Credentials and webhook endpoints are managed by the partner in the partner portal. The Bank sees metadata only — secrets are never displayed here.</Alert>
+            {p.checkout && (
+              <Section title="Checkout integration" description="How this partner offers Buy Now Pay Later with AltBank. The shopper stays on the partner’s website: the Bank’s checkout opens in a panel there.">
+                <div className="space-y-5">
+                  <EmbedFlow merchant={p.trading_name} />
+                  <div className="grid gap-5 lg:grid-cols-2">
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-subtle">Payment-screen button</p>
+                      <BnplButtonPreview label={p.checkout.button_label} />
+                      <KeyValue columns={1} items={[{ label: 'SDK', value: <Mono>{p.checkout.sdk_url}</Mono> }, { label: 'API base', value: <Mono>{p.checkout.api_base_url}</Mono> }]} />
+                    </div>
+                    <div>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-subtle">Websites allowed to embed the checkout</p>
+                      <ul className="space-y-2">
+                        {p.checkout.embed_origins.map((o) => (
+                          <li key={o} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"><Mono>{o}</Mono><Badge tone="success">Approved</Badge></li>
+                        ))}
+                        {p.checkout.pending_origins.map((o) => (
+                          <li key={o} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"><Mono>{o}</Mono><Badge tone="warning">Pending approval</Badge></li>
+                        ))}
+                        {!p.checkout.embed_origins.length && !p.checkout.pending_origins.length && <li className="text-sm text-muted">No websites recorded.</li>}
+                      </ul>
+                      <p className="mt-2 text-xs text-muted">Origins come from the partner configuration (maker–checker). The checkout refuses to load inside any website not approved here.</p>
+                    </div>
+                  </div>
+                </div>
+              </Section>
+            )}
             <Section title="API credentials" flush>
               <DataTable
                 caption="API credentials"

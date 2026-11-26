@@ -9,9 +9,11 @@ import { StatementsService } from './statements.service';
 import { EligibilityService } from '../credit/eligibility.service';
 import { OperationsService } from '../operations/operations.service';
 import { ArafService } from '../araf/araf.service';
+import { CustomerIdempotencyInterceptor } from './customer-idempotency.interceptor';
 
 /** Hosted customer checkout API. The checkout session id in the path must match the browser session. */
 @Controller('api/checkout/sessions/:sessionId')
+@UseInterceptors(CustomerIdempotencyInterceptor)
 export class CustomerController {
   constructor(
     private readonly journey: JourneyService,

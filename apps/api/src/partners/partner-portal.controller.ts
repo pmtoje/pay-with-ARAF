@@ -199,6 +199,13 @@ export class PartnerPortalController {
       credentials: await this.partners.listCredentials(partner.id),
       webhook_endpoints: await this.partners.listWebhookEndpoints(partner.id),
       approved_return_origins: domains.filter((d) => d.kind === 'RETURN_URL_ORIGIN').map((d) => d.value),
+      // Embedded checkout: the SDK and the websites allowed to show the Bank's checkout in a panel.
+      checkout: {
+        sdk_url: `${this.config.CHECKOUT_BASE_URL}/v1/araf.js`,
+        checkout_origin: new URL(this.config.CHECKOUT_BASE_URL).origin,
+        button_label: 'Buy Now Pay Later with AltBank',
+        embed_origins: domains.filter((d) => d.kind === 'RETURN_URL_ORIGIN' && d.environment === this.config.PLATFORM_ENVIRONMENT).map((d) => d.value),
+      },
       configuration: config ? this.partners.presentConfig(config) : null,
       event_types: Object.entries(WEBHOOK_EVENT_TYPES).map(([type, description]) => ({ type, description })),
       health: await this.reports.webhookHealth(parseRange({ range: '7d' }), partner.id),

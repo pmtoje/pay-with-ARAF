@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 — 2026-11-26
+### Added
+- Embedded checkout (D-026): `/v1/araf.js` SDK (`ArafCheckout.open`, `ArafCheckout.button`), per-session
+  `frame-ancestors` for approved partner origins, postMessage events, partitioned cookies over HTTPS;
+  AltMall keeps the shopper on its own pages (no redirect) with a "Buy Now Pay Later with AltBank" CTA.
+- Partner portal → Integration → *Checkout button* (preview, approved websites, copy-paste snippets);
+  Bank admin → Partner → Integration → *Checkout integration*; developer portal *Embedded checkout*.
+- Action-and-amount call-to-action labels across the hosted checkout (D-027).
+- Safe retries (D-028): customer `Idempotency-Key` replay, client retry with the same key, offline notice,
+  `documentation/FAILURE_HANDLING.md`.
+
 ## 0.2.0 — 2026-11-26
 ### Added
 - Customer equity (D-023): "Your equity" screen in the hosted checkout; financed = price − equity,
@@ -14,7 +25,7 @@
 - Pricing is per annum (default 25% p.a.) with a hard 24-month maximum, replacing 25% / 50% total
   markup tiers. Affordability requires a completed SeedFi credit check.
 - Migration `20261126090000_equity_and_product_pricing`; seed supersedes legacy policy versions.
-- Tests: 199 passing (110 rules · 36 security · 7 integrations · 46 API).
+- Tests: 199 passing (110 rules · 36 security · 7 integrations · 46 API); 200 after 0.3.0.
 
 ## 0.1.1 — 2026-11-25
 ### Added

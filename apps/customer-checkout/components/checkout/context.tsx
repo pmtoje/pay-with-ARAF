@@ -62,6 +62,13 @@ export function useAction() {
         return r;
       } catch (e) {
         if (SESSION_CODES.has(errorCode(e) ?? '') && (await ctx.recover(e))) return undefined;
+        if (errorCode(e) === 'NETWORK_UNCERTAIN') {
+          // The request may or may not have reached the Bank. Re-read the authoritative state
+          // rather than guessing; retrying is safe because the same step cannot be applied twice.
+          await ctx.refresh();
+          ctx.setFlash({ tone: 'warning', title: 'Your connection is slow', body: 'We’ve loaded your latest progress from the Bank. If this step still shows below, please try it again — it won’t be applied twice.' });
+          return undefined;
+        }
         if (opts.onError?.(e)) return undefined;
         setError(e);
         if (errorCode(e) === 'INVALID_STATE') void ctx.refresh();

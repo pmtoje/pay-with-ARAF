@@ -18,6 +18,8 @@ export interface Summary {
   items: Array<{ name: string; quantity: number; unit_amount: number; line_amount: number; category: string | null }>;
   cancel_url: string | null;
   return_url: string | null;
+  /** Merchant websites approved to embed this checkout. */
+  embed_origins?: string[];
   expires_at: string;
   expired: boolean;
   superseded_by: string | null;

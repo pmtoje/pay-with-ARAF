@@ -181,7 +181,7 @@ export function EnhancedReviewStep() {
         <Why>These details help a credit officer understand your ability to repay comfortably. They are kept confidential and never shared with the merchant.</Why>
         <ErrorNotice error={error} />
         <Button type="submit" size="lg" block loading={busy === 'submit'}>
-          Submit for review
+          Send my details to the Bank for review
         </Button>
       </form>
     </StepCard>

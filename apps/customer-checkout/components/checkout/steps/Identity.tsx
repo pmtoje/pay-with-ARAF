@@ -150,7 +150,7 @@ export function IdentityStep() {
               Change details
             </Button>
             <Button size="lg" onClick={() => verify()} loading={busy === 'verify'} disabled={code.length !== 6 || !!busy}>
-              Verify and continue
+              Verify code and check my eligibility
             </Button>
           </>
         }
@@ -250,7 +250,7 @@ export function IdentityStep() {
 
         <ErrorNotice error={error} />
         <Button type="submit" size="lg" block loading={busy === 'identity'} disabled={!catalogue}>
-          Send verification code
+          Send my verification code
         </Button>
         <SecurityNote />
       </form>

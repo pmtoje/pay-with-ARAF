@@ -54,7 +54,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
         <div className="space-y-6">
           {order.araf_application_reference || order.payment_method === 'araf' ? (
             <Suspense fallback={<ConfirmingPanel />}>
-              <ArafStatusPanel order={order} fromAraf={fromAraf} />
+              <ArafStatusPanel order={order} fromAraf={fromAraf} autoOpen={sp.pay === 'araf'} />
             </Suspense>
           ) : (
             <DemoPaymentPanel order={order} />

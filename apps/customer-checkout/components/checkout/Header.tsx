@@ -5,6 +5,7 @@ import { Button, Dialog, Logo, ThemeToggle, formatNaira } from '@araf/ui';
 import { safeHref } from '@/lib/api';
 import { useCheckout } from './context';
 import { LockIcon, SecurityNote } from './ui';
+import { isEmbedded } from '@/lib/embed';
 
 function Items() {
   const { summary } = useCheckout();
@@ -48,7 +49,8 @@ export function CheckoutHeader() {
   const [help, setHelp] = useState(false);
   return (
     <header className="border-b border-border bg-surface">
-      <div className="mx-auto flex h-16 max-w-5xl items-center gap-3 px-4 sm:px-6">
+      {/* Embedded: the merchant's panel draws its own close button at the top right. */}
+      <div className={`mx-auto flex h-16 max-w-5xl items-center gap-3 px-4 sm:px-6 ${isEmbedded() ? 'pr-14 sm:pr-14' : ''}`}>
         <Logo className="min-w-0" />
         <span className="hidden h-6 w-px bg-border sm:block" aria-hidden="true" />
         <span className="hidden truncate text-sm text-muted sm:block">

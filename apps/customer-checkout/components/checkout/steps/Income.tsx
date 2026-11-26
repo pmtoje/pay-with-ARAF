@@ -57,7 +57,7 @@ export function IncomeProfileStep({ onDone }: { onDone?: () => void }) {
           })
         }
       >
-        Continue
+        {choice === 'BUSINESS_OWNER' ? 'Continue as a business owner — share 12 months of statements' : choice === 'SALARY_EARNER' ? 'Continue as a salary earner — share 6 months of statements' : 'Choose how you earn'}
       </Button>
     </StepCard>
   );

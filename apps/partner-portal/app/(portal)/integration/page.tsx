@@ -10,11 +10,12 @@ import { RequirePermission } from '@/components/gate';
 import { ApiKeys } from '@/components/integration/api-keys';
 import { Webhooks } from '@/components/integration/webhooks';
 import { ApiRequestLog, EventLog } from '@/components/integration/logs';
+import { CheckoutEmbed } from '@/components/integration/checkout-embed';
 
 const DOCS_URL = process.env.NEXT_PUBLIC_DEVELOPER_PORTAL_URL ?? 'http://localhost:3004';
 
-type TabId = 'overview' | 'keys' | 'webhooks' | 'events' | 'requests';
-const TAB_IDS: TabId[] = ['overview', 'keys', 'webhooks', 'events', 'requests'];
+type TabId = 'overview' | 'checkout' | 'keys' | 'webhooks' | 'events' | 'requests';
+const TAB_IDS: TabId[] = ['overview', 'checkout', 'keys', 'webhooks', 'events', 'requests'];
 
 export default function IntegrationPage() {
   return (
@@ -44,7 +45,7 @@ function IntegrationInner() {
     <>
       <PageHeader
         title="Integration"
-        description="API keys, webhooks and logs for connecting your store to Pay with ARAF."
+        description="Checkout button, API keys, webhooks and logs for offering Buy Now Pay Later with AltBank on your website."
         actions={
           <>
             <a href={DOCS_URL} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center rounded-md border border-border-strong bg-surface px-4 text-sm font-medium text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
@@ -63,6 +64,7 @@ function IntegrationInner() {
           onChange={selectTab}
           tabs={[
             { id: 'overview', label: 'Overview' },
+            { id: 'checkout', label: 'Checkout button' },
             { id: 'keys', label: 'API keys', count: data?.credentials.filter((c) => c.status === 'ACTIVE').length },
             { id: 'webhooks', label: 'Webhooks', count: data?.webhook_endpoints.length },
             { id: 'events', label: 'Event log' },
@@ -84,6 +86,8 @@ function IntegrationInner() {
         </Card>
       ) : tab === 'overview' ? (
         <OverviewTab data={data} sandbox={me.sandbox} />
+      ) : tab === 'checkout' ? (
+        <CheckoutEmbed data={data} />
       ) : tab === 'keys' ? (
         <ApiKeys credentials={data.credentials} canManage={canManage} environment={data.environment} onChange={reload} />
       ) : (

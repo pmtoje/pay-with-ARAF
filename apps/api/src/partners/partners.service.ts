@@ -186,6 +186,13 @@ export class PartnersService implements OnModuleInit {
       ...this.presentPartner(p),
       configurations: p.configurations.map((c) => this.presentConfig(c)),
       domains: p.domains.map((d) => ({ id: d.id, environment: d.environment, kind: d.kind, value: d.value, approved: d.approved })),
+      checkout: {
+        sdk_url: `${this.config.CHECKOUT_BASE_URL}/v1/araf.js`,
+        api_base_url: `${this.config.PUBLIC_API_URL}/api/v1`,
+        button_label: 'Buy Now Pay Later with AltBank',
+        embed_origins: p.domains.filter((d) => d.kind === 'RETURN_URL_ORIGIN' && d.approved).map((d) => d.value),
+        pending_origins: p.domains.filter((d) => d.kind === 'RETURN_URL_ORIGIN' && !d.approved).map((d) => d.value),
+      },
       vendors: p.vendors.map((v) => ({
         id: v.id,
         vendor_reference: v.vendorReference,

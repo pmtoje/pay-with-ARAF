@@ -62,7 +62,8 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
 
   const started = await startArafCheckout(order, customer.email);
   if (!started.ok) return { ok: false, title: started.title, lines: started.lines, reference: order.reference };
-  return { ok: true, reference: order.reference, redirect: started.checkoutUrl, external: true };
+  // The shopper stays on AltMall: the order page opens the Bank's checkout in an embedded panel.
+  return { ok: true, reference: order.reference, redirect: `/orders/${order.reference}?pay=araf`, external: false };
 }
 
 /** Switch an order whose financing did not complete to a demo payment method. */

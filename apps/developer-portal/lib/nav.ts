@@ -16,6 +16,7 @@ export const DOC_NAV: Array<{ section: string; items: DocLink[] }> = [
     section: 'Accept payments',
     items: [
       { href: '/checkout-sessions', title: 'Create a checkout session' },
+      { href: '/embedded-checkout', title: 'Embedded checkout (no redirect)' },
       { href: '/redirects', title: 'Redirects & return URLs' },
       { href: '/applications', title: 'Application status' },
     ],
