@@ -30,6 +30,10 @@ export function IdentityStep() {
   const [showBvn, setShowBvn] = useState(false);
   const [dob, setDob] = useState('');
   const [touched, setTouched] = useState(false);
+  // Details the merchant already gave us are used as-is; the customer can still change them.
+  const pre = summary.prefill;
+  const [useBvnFromMerchant, setUseBvnFromMerchant] = useState(!!pre?.bvn);
+  const [useDobFromMerchant, setUseDobFromMerchant] = useState(!!pre?.date_of_birth);
   const [otp, setOtp] = useState<{ to: string | null } | null>(null);
   const [code, setCode] = useState('');
   const [cooldown, setCooldown] = useCountdown(0);
@@ -50,6 +54,8 @@ export function IdentityStep() {
       const d = (e as CustomEvent<{ bvn: string; date_of_birth: string }>).detail;
       setBvn(d.bvn);
       setDob(d.date_of_birth);
+      setUseBvnFromMerchant(false);
+      setUseDobFromMerchant(false);
     };
     window.addEventListener(SANDBOX_IDENTITY_EVENT, onFill);
     return () => window.removeEventListener(SANDBOX_IDENTITY_EVENT, onFill);
@@ -57,14 +63,17 @@ export function IdentityStep() {
 
   const required = (catalogue ?? []).filter((c) => c.required);
   const missingConsent = required.some((c) => !checked[c.type]);
-  const bvnError = touched && !/^\d{11}$/.test(bvn) ? 'Enter the 11 digits of your BVN.' : null;
-  const dobError = touched && (!dob || dob > todayIso()) ? 'Enter your date of birth.' : null;
+  const needBvn = !useBvnFromMerchant;
+  const needDob = !useDobFromMerchant;
+  const bvnError = touched && needBvn && !/^\d{11}$/.test(bvn) ? 'Enter the 11 digits of your BVN.' : null;
+  const dobError = touched && needDob && (!dob || dob > todayIso()) ? 'Enter your date of birth.' : null;
 
   const sendIdentity = () =>
     run(
       'identity',
       async () => {
-        const res = await api.post<OtpSent>(`${base}/identity`, { bvn, date_of_birth: dob });
+        // Only send what the customer typed; anything the merchant provided is used server-side.
+        const res = await api.post<OtpSent>(`${base}/identity`, { ...(needBvn ? { bvn } : {}), ...(needDob ? { date_of_birth: dob } : {}) });
         setOtp({ to: res.otp_sent_to });
         setCode('');
         setCooldown(res.resend_available_in_seconds ?? 60);
@@ -81,6 +90,11 @@ export function IdentityStep() {
               return true;
             }
           }
+          // Details from the merchant did not match the BVN record: let the customer enter them.
+          if (['IDENTITY_MISMATCH', 'INVALID_BVN', 'VALIDATION_FAILED', 'IDENTITY_NOT_FOUND'].includes(errorCode(e) ?? '')) {
+            setUseBvnFromMerchant(false);
+            setUseDobFromMerchant(false);
+          }
           if (errorCode(e) === 'AGE_NOT_ELIGIBLE') {
             void refresh();
           }
@@ -92,7 +106,7 @@ export function IdentityStep() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (missingConsent || !/^\d{11}$/.test(bvn) || !dob || dob > todayIso()) return;
+    if (missingConsent || (needBvn && !/^\d{11}$/.test(bvn)) || (needDob && (!dob || dob > todayIso()))) return;
     void run('identity', async () => {
       const consents = (catalogue ?? []).filter((c) => checked[c.type]).map((c) => c.type);
       await api.post(`${base}/consents`, { consents });
@@ -218,7 +232,30 @@ export function IdentityStep() {
         </fieldset>
 
         <fieldset className="space-y-4">
-          <legend className="mb-1 text-sm font-semibold text-fg">Your details</legend>
+          <legend className="mb-1 text-sm font-semibold text-fg">{needBvn || needDob ? (pre && (pre.bvn || pre.date_of_birth) ? 'Just one more detail' : 'Your details') : 'Your details'}</legend>
+          {pre && (pre.bvn || pre.date_of_birth || pre.name || pre.email || pre.phone || pre.address) && (
+            <div className="rounded-md border border-border bg-surface-2/60 px-4 py-3 text-sm">
+              <p className="font-medium text-fg">Already provided by {pre.from}</p>
+              <ul className="mt-2 space-y-1.5 text-muted">
+                {pre.bvn && useBvnFromMerchant && (
+                  <li className="flex items-center justify-between gap-3">
+                    <span>BVN ending <span className="font-mono text-fg">{pre.bvn_hint?.slice(-2)}</span></span>
+                    <button type="button" className="min-h-[44px] text-xs font-medium text-gold-strong underline underline-offset-2" onClick={() => setUseBvnFromMerchant(false)}>Use a different BVN</button>
+                  </li>
+                )}
+                {pre.date_of_birth && useDobFromMerchant && (
+                  <li className="flex items-center justify-between gap-3">
+                    <span>Date of birth</span>
+                    <button type="button" className="min-h-[44px] text-xs font-medium text-gold-strong underline underline-offset-2" onClick={() => setUseDobFromMerchant(false)}>Enter it myself</button>
+                  </li>
+                )}
+                {(pre.name || pre.email || pre.phone || pre.address) && (
+                  <li>{[pre.name && 'name', pre.email && 'email', pre.phone && 'phone', pre.address && 'address'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())} — used if you need to open an account. You won’t be asked again.</li>
+                )}
+              </ul>
+            </div>
+          )}
+          {needBvn && (
           <Field label="Bank Verification Number (BVN)" required error={bvnError} hint="11 digits. Dial *565*0# from your registered line if you don’t know it.">
             {({ id, describedBy, invalid }) => (
               <div className="relative">
@@ -242,9 +279,12 @@ export function IdentityStep() {
               </div>
             )}
           </Field>
+          )}
+          {needDob && (
           <Field label="Date of birth" required error={dobError} hint="As registered on your BVN record.">
             {({ id, describedBy, invalid }) => <Input id={id} aria-describedby={describedBy} aria-invalid={invalid} type="date" max={todayIso()} min="1900-01-01" value={dob} onChange={(e) => setDob(e.target.value)} />}
           </Field>
+          )}
           <Why>Your BVN and date of birth let us confirm your identity with the national BVN service and send a code to the phone number on your BVN record. We never show or share your full BVN.</Why>
         </fieldset>
 

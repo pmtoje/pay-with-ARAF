@@ -20,10 +20,23 @@ export const createCheckoutSessionSchema = z
     currency: z.literal('NGN'),
     amount: kobo,
     items: z.array(checkoutItemSchema).min(1).max(50),
+    /**
+     * Details the merchant already collected. Pay with ARAF pre-fills them and only asks the shopper
+     * for what is missing. They are encrypted at rest, never returned to the merchant, and identity
+     * is still proven with a one-time code sent to the phone linked to the BVN.
+     */
     customer: z
       .object({
         email: z.string().email().max(254).optional(),
         phone: z.string().regex(/^\+?\d{10,15}$/).optional(),
+        first_name: z.string().trim().min(1).max(80).optional(),
+        last_name: z.string().trim().min(1).max(80).optional(),
+        date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        bvn: z.string().regex(/^\d{11}$/).optional(),
+        address: z
+          .object({ line1: z.string().trim().min(1).max(200), city: z.string().trim().min(1).max(80), state: z.string().trim().min(1).max(80) })
+          .strict()
+          .optional(),
       })
       .strict()
       .default({}),

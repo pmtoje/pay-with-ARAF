@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 — 2026-11-26
+### Added
+- Merchant pre-fill (D-031): optional customer name, email, phone, address, date of birth and BVN on
+  checkout sessions; the hosted checkout asks only for what is missing; account opening pre-filled;
+  AltMall sends what it has (optional DOB/BVN); migration `20261126170000_checkout_prefill`; 2 tests.
+
 ## 0.3.2 — 2026-11-26
 ### Added
 - Super Admin configures the partner side (D-030): admin → Partner → *Partner portal* (sections,

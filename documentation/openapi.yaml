@@ -61,6 +61,13 @@ components:
           properties:
             email: { type: string, format: email }
             phone: { type: string, pattern: '^\+?\d{10,15}$' }
+            first_name: { type: string, maxLength: 80 }
+            last_name: { type: string, maxLength: 80 }
+            date_of_birth: { type: string, format: date, description: Pre-fills identity; still confirmed by OTP to the BVN-linked phone }
+            bvn: { type: string, pattern: '^\d{11}$', description: Optional. Encrypted at rest, never returned or logged, never in URLs }
+            address:
+              type: object
+              properties: { line1: { type: string }, city: { type: string }, state: { type: string } }
         return_url: { type: string, format: uri, description: Origin must be approved for the partner }
         cancel_url: { type: string, format: uri }
         revises_session_id: { type: string, description: Supersede an active session with a revised cart }

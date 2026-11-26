@@ -8,6 +8,7 @@ import { AppError, fail } from '../common/errors';
 import { PrismaService } from '../common/prisma.service';
 import { AuditService, ReferenceService, StateService, SYSTEM_ACTOR, toJsonRaw, type Actor } from '../common/core.services';
 import { AppContextService } from '../applications/app-context.service';
+import { CryptoService } from '../common/crypto.service';
 import { merchantTimeline, n, presentMerchantApplication } from '../applications/presenters';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -30,6 +31,7 @@ export class CheckoutService {
     private readonly ctx: AppContextService,
     private readonly webhooks: WebhooksService,
     private readonly notifications: NotificationsService,
+    private readonly crypto: CryptoService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -148,6 +150,14 @@ export class CheckoutService {
           expiresAt,
         },
       });
+      // Details the merchant already has: encrypted (bound to this session) and never returned to it.
+      const given = Object.fromEntries(Object.entries(input.customer ?? {}).filter(([, v]) => v !== undefined && v !== ''));
+      let prefill: Record<string, unknown> | null = Object.keys(given).length ? given : null;
+      if (!prefill && revises) {
+        const old = await tx.checkoutSession.findUniqueOrThrow({ where: { id: revises.sessionId }, select: { customerPrefillEncrypted: true } });
+        if (old.customerPrefillEncrypted) prefill = this.crypto.decryptJson<Record<string, unknown>>(old.customerPrefillEncrypted, `prefill:${revises.sessionId}`);
+      }
+      if (prefill) await tx.checkoutSession.update({ where: { id: session.id }, data: { customerPrefillEncrypted: this.crypto.encryptJson(prefill, `prefill:${session.id}`) } });
       const app = await tx.financingApplication.create({
         data: {
           reference,

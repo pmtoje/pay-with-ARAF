@@ -352,6 +352,53 @@ describe('Sandbox scenarios and security controls', () => {
     expect(detail.portal).toMatchObject({ configured: true, pending: null, active: { max_users: 1 } });
   }, 180_000);
 
+  it('merchant-provided details are pre-filled; the customer is only asked for what is missing', async () => {
+    const ref = order();
+    const body = { ...cart(ref, 300_000), customer: { email: 'ada@example.com', phone: '+2348030000001', first_name: 'Adaeze', last_name: 'Okonkwo', date_of_birth: '1990-04-12', bvn: '22200000001', address: { line1: '12 Admiralty Way', city: 'Lagos', state: 'Lagos' } } };
+    const res = await createCheckout(h, a, body);
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(JSON.stringify(res.body)).not.toContain('22200000001');
+    // Stored encrypted, bound to the session; never in plain text.
+    const row = await h.prisma.checkoutSession.findUniqueOrThrow({ where: { id: res.body.session_id } });
+    expect(row.customerPrefillEncrypted).toBeTruthy();
+    expect(row.customerPrefillEncrypted).not.toContain('22200000001');
+    // The public summary says WHAT was provided, never the values (BVN: last two digits only).
+    const summary = (await request(h.http).get(`/api/checkout/sessions/${res.body.session_id}`)).body;
+    expect(summary.prefill).toMatchObject({ bvn: true, bvn_hint: '•••••••••01', date_of_birth: true, name: true, email: true, phone: true, address: true });
+    expect(JSON.stringify(summary)).not.toContain('22200000001');
+    expect(JSON.stringify(summary)).not.toContain('1990-04-12');
+    // The customer only gives consent and the one-time code: no BVN or date of birth typed.
+    const c = await openCheckout(h, res.body.session_id);
+    expect((await c.post('/consents', { consents: ['IDENTITY_VERIFICATION', 'CREDIT_ASSESSMENT', 'APPLICATION_PROCESSING'] })).status).toBe(200);
+    const idv = await c.post('/identity', {});
+    expect(idv.status, JSON.stringify(idv.body)).toBe(200);
+    const otp = await c.post('/identity/otp', { code: await latestOtp(h, res.body.session_id) });
+    expect(otp.status, JSON.stringify(otp.body)).toBe(200);
+    expect(otp.body.state).toBe('ACCOUNT_VERIFICATION_PENDING');
+    // The merchant's order view never includes the prefill.
+    const merchantView = await request(h.http).get(`/api/v1/orders/${ref}`).set('Authorization', `Bearer ${a.apiKey}`);
+    expect(JSON.stringify(merchantView.body)).not.toContain('22200000001');
+    await c.post('/cancel');
+  });
+
+  it('wrong merchant-provided details fall back to the customer; partial prefill asks only for the missing field', async () => {
+    const res = await createCheckout(h, a, { ...cart(order(), 300_000), customer: { bvn: '22200000001', date_of_birth: '1991-01-01' } });
+    const c = await openCheckout(h, res.body.session_id);
+    await c.post('/consents', { consents: ['IDENTITY_VERIFICATION', 'CREDIT_ASSESSMENT', 'APPLICATION_PROCESSING'] });
+    expect((await c.post('/identity', {})).body.error.code).toBe('IDENTITY_MISMATCH');
+    // The customer corrects only the date of birth; the BVN still comes from the merchant.
+    const fixed = await c.post('/identity', { date_of_birth: '1990-04-12' });
+    expect(fixed.status, JSON.stringify(fixed.body)).toBe(200);
+    await c.post('/cancel').catch(() => undefined);
+    // Nothing provided at all → both fields are required.
+    const bare = await createCheckout(h, a, cart(order(), 300_000));
+    const c2 = await openCheckout(h, bare.body.session_id);
+    await c2.post('/consents', { consents: ['IDENTITY_VERIFICATION', 'CREDIT_ASSESSMENT', 'APPLICATION_PROCESSING'] });
+    const missing = await c2.post('/identity', {});
+    expect(missing.body.error.code).toBe('VALIDATION_FAILED');
+    expect(JSON.stringify(missing.body)).toContain('date_of_birth');
+  });
+
   it('uncertain salary classification → review, not decline', async () => {
     const { c, ref } = await start('22200000015', '1992-12-12');
     await toStatement(c);

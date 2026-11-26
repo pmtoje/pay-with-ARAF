@@ -205,13 +205,14 @@ export class SandboxAccountOpeningProvider implements AccountOpeningProvider {
   readonly name = 'AltBank account opening (sandbox simulator)';
   constructor(private readonly deps: SandboxDeps) {}
 
-  async createSession(input: { correlationRef: string; returnUrl: string; firstName: string; lastName: string }, ctx: CallContext) {
+  async createSession(input: { correlationRef: string; returnUrl: string; firstName: string; lastName: string; prefill?: { email?: string; phone?: string; address?: { line1: string; city: string; state: string } } }, ctx: CallContext) {
     const identity = await identityFor(this.deps.store, ctx);
     await this.deps.store.put('ACCOUNT_OPENING', input.correlationRef, {
       status: 'PENDING',
       bvn: identity?.bvn,
       returnUrl: input.returnUrl,
       name: `${input.firstName} ${input.lastName}`,
+      prefill: input.prefill ?? {},
     });
     return { redirectUrl: `${this.deps.checkoutBaseUrl}/sandbox/account-opening/${encodeURIComponent(input.correlationRef)}` };
   }

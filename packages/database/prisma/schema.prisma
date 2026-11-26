@@ -560,6 +560,8 @@ model CheckoutSession {
   cancelUrl          String
   revisesSessionId   String?
   supersededById     String?
+  /// Customer details the merchant already collected (AES-GCM, AAD prefill:<session id>). Never returned to the merchant.
+  customerPrefillEncrypted String?
   expiresAt          DateTime
   openedAt           DateTime?
   createdAt          DateTime      @default(now())

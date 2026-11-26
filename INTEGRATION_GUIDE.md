@@ -12,6 +12,9 @@
    creates the session (below) and your page calls `ArafCheckout.open({ checkoutUrl })`: the Bank's
    checkout opens in a panel on your page and the shopper never leaves your website. Your website
    origin must be approved by the Bank. A plain redirect to `checkout_url` also works.
+   Send every customer detail you already collected in `customer` (name, email, phone, address, and
+   date of birth / BVN if you lawfully hold them): the Bank's checkout pre-fills them and only asks
+   the shopper for what is missing. Consent and the one-time code are always the shopper's own.
    When the shopper chooses it, your **server** calls
    `POST /api/v1/checkout/sessions` with the cart snapshot (integer kobo, single approved vendor,
    approved `return_url` / `cancel_url` origins) and an `Idempotency-Key` derived from your order

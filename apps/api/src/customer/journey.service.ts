@@ -55,6 +55,16 @@ const enhancedSchema = z
   })
   .strict();
 
+export interface MerchantPrefill {
+  email?: string;
+  phone?: string;
+  first_name?: string;
+  last_name?: string;
+  date_of_birth?: string;
+  bvn?: string;
+  address?: { line1: string; city: string; state: string };
+}
+
 @Injectable()
 export class JourneyService {
   constructor(
@@ -110,8 +120,15 @@ export class JourneyService {
 
   // ---- Public summary & session ----------------------------------------------------------
 
+  /** Merchant-supplied customer details for this checkout (server-side only). */
+  async prefillFor(sessionId: string): Promise<MerchantPrefill> {
+    const s = await this.prisma.checkoutSession.findUnique({ where: { id: sessionId }, select: { customerPrefillEncrypted: true } });
+    return s?.customerPrefillEncrypted ? this.crypto.decryptJson<MerchantPrefill>(s.customerPrefillEncrypted, `prefill:${sessionId}`) : {};
+  }
+
   async summary(sessionId: string) {
     const { session, app } = await this.appBySession(sessionId);
+    const pre = await this.prefillFor(session.id);
     const partner = await this.prisma.partner.findUniqueOrThrow({ where: { id: session.partnerId }, select: { tradingName: true, websiteUrl: true } });
     // Websites allowed to embed this checkout (approved partner origins for this environment).
     const embedOrigins = (await this.prisma.partnerDomain.findMany({ where: { partnerId: session.partnerId, environment: session.environment, kind: 'RETURN_URL_ORIGIN', approved: true }, select: { value: true } })).map((d) => d.value);
@@ -127,6 +144,18 @@ export class JourneyService {
       cancel_url: session.cancelUrl,
       return_url: session.returnUrl,
       embed_origins: embedOrigins,
+      // Which details the merchant already provided. Values are never sent to the browser before
+      // the customer proves who they are; the BVN shows only its last two digits.
+      prefill: {
+        from: partner.tradingName,
+        bvn: !!pre.bvn,
+        bvn_hint: pre.bvn ? `•••••••••${pre.bvn.slice(-2)}` : null,
+        date_of_birth: !!pre.date_of_birth,
+        name: !!(pre.first_name && pre.last_name),
+        email: !!pre.email,
+        phone: !!pre.phone,
+        address: !!pre.address,
+      },
       expires_at: session.expiresAt,
       expired,
       superseded_by: session.supersededById,
@@ -200,8 +229,13 @@ export class JourneyService {
   // ---- Identity verification ------------------------------------------------------------
 
   async submitIdentity(applicationId: string, body: unknown, req: AuthedRequest) {
-    const input = z.object({ bvn: z.string(), date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict().parse(body);
+    const given = z.object({ bvn: z.string().optional(), date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict().parse(body);
     const app = await this.prisma.financingApplication.findUniqueOrThrow({ where: { id: applicationId } });
+    // Use what the merchant already provided; the customer only supplies what is missing (or overrides it).
+    const pre = await this.prefillFor(app.checkoutSessionId);
+    const input = { bvn: given.bvn || pre.bvn || '', date_of_birth: given.date_of_birth || pre.date_of_birth || '' };
+    const missing = [!input.bvn && 'bvn', !input.date_of_birth && 'date_of_birth'].filter(Boolean) as string[];
+    if (missing.length) fail('VALIDATION_FAILED', { fields: missing.map((path) => ({ path, message: 'Required' })) });
     if (app.status !== 'IDENTITY_PENDING') throw new AppError('INVALID_STATE');
     if (!(await this.hasConsents(applicationId, ['IDENTITY_VERIFICATION', 'CREDIT_ASSESSMENT', 'APPLICATION_PROCESSING']))) throw new AppError('CONSENT_REQUIRED');
     if (!isValidBvnFormat(input.bvn)) throw new AppError('INVALID_BVN');
@@ -528,6 +562,19 @@ export class JourneyService {
 
   // ---- Account opening ----------------------------------------------------------------
 
+  /** Contact details for account opening: merchant-provided values, falling back to the order. */
+  private async accountOpeningPrefill(app: FinancingApplication) {
+    const pre = await this.prefillFor(app.checkoutSessionId);
+    const order = await this.prisma.merchantOrder.findUnique({ where: { id: app.orderId }, select: { customerEmail: true, customerPhone: true } });
+    const out: { email?: string; phone?: string; address?: { line1: string; city: string; state: string } } = {};
+    const email = pre.email ?? order?.customerEmail ?? undefined;
+    const phone = pre.phone ?? order?.customerPhone ?? undefined;
+    if (email) out.email = email;
+    if (phone) out.phone = phone;
+    if (pre.address) out.address = pre.address;
+    return out;
+  }
+
   async startAccountOpening(applicationId: string, req: AuthedRequest) {
     const app = await this.prisma.financingApplication.findUniqueOrThrow({ where: { id: applicationId } });
     if (!['ACCOUNT_VERIFICATION_PENDING', 'ACCOUNT_OPENING_PENDING'].includes(app.status)) throw new AppError('INVALID_STATE');
@@ -536,8 +583,9 @@ export class JourneyService {
     const nonce = randomToken('', 24);
     const state = signStateToken({ ref: correlationRef, app: app.id, nonce }, this.config.STATE_TOKEN_KEY, 24 * 3600);
     const returnUrl = `${this.config.CHECKOUT_BASE_URL}/c/${app.checkoutSessionId}/account-opening/return?state=${encodeURIComponent(state)}`;
+    const prefill = await this.accountOpeningPrefill(app);
     const { redirectUrl } = await this.providers.call(app.environment, 'ACCOUNT_OPENING', 'create_session', this.callCtx(app, req), () =>
-      this.providers.for(app.environment).accountOpening.createSession({ correlationRef, returnUrl, firstName: customer.firstName, lastName: customer.lastName }, this.callCtx(app, req)),
+      this.providers.for(app.environment).accountOpening.createSession({ correlationRef, returnUrl, firstName: customer.firstName, lastName: customer.lastName, prefill }, this.callCtx(app, req)),
     );
     await this.prisma.$transaction(async (tx) => {
       const locked = await this.ctx.lockApplication(tx, applicationId);

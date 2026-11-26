@@ -121,9 +121,19 @@ export interface CoreBankingProvider {
 
 export interface AccountOpeningProvider {
   readonly name: string;
-  createSession(input: { correlationRef: string; returnUrl: string; firstName: string; lastName: string }, ctx: CallContext): Promise<{ redirectUrl: string }>;
+  /**
+   * `prefill` carries details the merchant already collected so the customer is not asked twice.
+   * Live mapping depends on the account-opening platform's contracted API (not yet supplied).
+   */
+  createSession(input: { correlationRef: string; returnUrl: string; firstName: string; lastName: string; prefill?: AccountOpeningPrefill }, ctx: CallContext): Promise<{ redirectUrl: string }>;
   /** Authoritative server-side result lookup (used after callbacks and for polling). */
   getResult(correlationRef: string, ctx: CallContext): Promise<{ status: 'PENDING' | 'ABANDONED' } | { status: 'COMPLETED'; accountNumber: string }>;
+}
+
+export interface AccountOpeningPrefill {
+  email?: string;
+  phone?: string;
+  address?: { line1: string; city: string; state: string };
 }
 
 // ---- Statement acquisition (Mono) ----------------------------------------------------

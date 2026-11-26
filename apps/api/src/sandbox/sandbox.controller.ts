@@ -57,9 +57,10 @@ export class SandboxController {
   @Public()
   async aoInfo(@Param('ref') ref: string) {
     this.guard();
-    const rec = await this.providers.simStore.get<{ status: string; name: string }>('ACCOUNT_OPENING', ref);
+    const rec = await this.providers.simStore.get<{ status: string; name: string; prefill?: { email?: string; phone?: string; address?: { line1: string; city: string; state: string } } }>('ACCOUNT_OPENING', ref);
     if (!rec) throw new AppError('NOT_FOUND');
-    return { status: rec.status, name: rec.name };
+    // Sandbox stand-in only: shows which fields arrived pre-filled from the merchant.
+    return { status: rec.status, name: rec.name, prefilled: rec.prefill ?? {} };
   }
 
   @Post('account-opening/:ref/complete')

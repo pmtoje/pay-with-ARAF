@@ -118,7 +118,7 @@ export interface CreateSessionBody {
   currency: 'NGN';
   amount: number;
   items: Array<{ sku: string; name: string; quantity: number; unit_amount: number; category: string; vendor_reference: string }>;
-  customer: { email?: string; phone?: string };
+  customer: { email?: string; phone?: string; first_name?: string; last_name?: string; date_of_birth?: string; bvn?: string; address?: { line1: string; city: string; state: string } };
   return_url: string;
   cancel_url: string;
 }

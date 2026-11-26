@@ -53,6 +53,8 @@ export function CheckoutForm({ defaults }: { defaults: { name: string; phone: st
   const router = useRouter();
   const [values, setValues] = useState({ name: defaults.name, phone: defaults.phone, address: '', city: '', state: '' });
   const [method, setMethod] = useState<PaymentMethod | null>(null);
+  const [dob, setDob] = useState('');
+  const [bvn, setBvn] = useState('');
   const [errors, setErrors] = useState<Errors>({});
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -107,7 +109,7 @@ export function CheckoutForm({ defaults }: { defaults: { name: string; phone: st
     }
     setBusy(true);
     try {
-      const res = await placeOrder({ lines: cart.lines, delivery: values, method: method! });
+      const res = await placeOrder({ lines: cart.lines, delivery: values, method: method!, identity: method === 'araf' ? { date_of_birth: dob || undefined, bvn: bvn || undefined } : undefined });
       if (res.ok) {
         setRedirecting(true);
         cart.clear();
@@ -215,6 +217,22 @@ export function CheckoutForm({ defaults }: { defaults: { name: string; phone: st
               <span className="text-warning">{elig.reasons.join(' ')}</span>
             )}
           </MethodOption>
+          {method === 'araf' && (
+            <div className="rounded-lg border border-dashed border-border-strong bg-surface-2/40 p-4">
+              <p className="text-sm font-semibold text-fg">Speed up Buy Now Pay Later (optional)</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted">
+                We’ll pass your name, phone, email and delivery address to The Alternative Bank so you don’t type them again. Add these too and the Bank won’t ask for them. They go straight to the Bank — AltMall doesn’t keep them. You’ll still confirm with a code sent to your BVN-linked phone.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Field label="Date of birth">
+                  {({ id }) => <Input id={id} type="date" value={dob} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDob(e.target.value)} />}
+                </Field>
+                <Field label="BVN" hint="11 digits">
+                  {({ id, describedBy }) => <Input id={id} aria-describedby={describedBy} inputMode="numeric" autoComplete="off" maxLength={11} value={bvn} onChange={(e) => setBvn(e.target.value.replace(/\D/g, '').slice(0, 11))} />}
+                </Field>
+              </div>
+            </div>
+          )}
           <MethodOption
             value="card_demo"
             checked={method === 'card_demo'}

@@ -218,6 +218,17 @@ switched off is removed from every partner user's effective permissions, so it d
 menu and its API calls are refused. The Super Admin still cannot approve partners, credit or payments
 and has no access to customer financial data. All changes are audited.
 
+### D-031 — Pre-fill what the merchant already collected; ask only for the rest
+Requested 2026-11-26. `POST /checkout/sessions` accepts optional `customer` details (first/last name,
+email, phone, address, date of birth, BVN). They are encrypted at rest (AAD bound to the session),
+copied to revised sessions, never returned to the merchant, never logged or placed in URLs. The
+hosted checkout shows which details were provided (BVN: last two digits only — values are never
+sent to the browser before OTP) and asks only for the missing ones; the customer can replace any
+pre-filled value, and a mismatch falls back to manual entry. Contact details and address pre-fill
+account opening. Explicit consent and the OTP to the BVN-linked phone are always required — they
+cannot be pre-filled. **Open:** Compliance to confirm which partners may send BVN (e.g. KYC-regulated
+partners only) and whether that needs a partner-level permission.
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable

@@ -25,7 +25,7 @@ export default function CheckoutSessions() {
       path="/checkout-sessions"
       eyebrow="Accept payments"
       title="Create a checkout session"
-      lede="A checkout session represents one customer’s attempt to finance one order. Create it from your server, then redirect the customer to the hosted checkout."
+      lede="A checkout session represents one customer’s attempt to finance one order. Create it from your server with whatever customer details you already have — Pay with ARAF pre-fills them and only asks for what is missing — then open the checkout on your page (or redirect)."
       toc={['Create a session', 'Request body', 'Response', 'Validation rules', 'Duplicate checkouts', 'Revised carts', 'Retrieve a session']}
     >
       <H2>Create a session</H2>
@@ -52,6 +52,10 @@ export default function CheckoutSessions() {
           { name: 'items[].vendor_reference', type: 'string (1–64)', required: true, description: 'The approved vendor that will be paid for this item.' },
           { name: 'customer.email', type: 'email', description: 'Customer contact for delivery and notifications. Shown to your fulfilment staff in the release queue.' },
           { name: 'customer.phone', type: 'string', description: <>10–15 digits, optional leading <code>+</code> (e.g. <code>+2348030000001</code>).</> },
+          { name: 'customer.first_name / last_name', type: 'string (≤80)', description: 'Send whatever you already collected — the hosted checkout pre-fills it and only asks the shopper for what is missing.' },
+          { name: 'customer.address', type: '{ line1, city, state }', description: 'Delivery address. Pre-fills account opening for new-to-bank customers.' },
+          { name: 'customer.date_of_birth', type: 'YYYY-MM-DD', description: 'If provided, the shopper is not asked for it. Identity is still confirmed with a one-time code to the BVN-linked phone.' },
+          { name: 'customer.bvn', type: '11 digits', description: <>Only if you already hold it lawfully (e.g. KYC-regulated partners). Encrypted at rest, never returned to you, never put in URLs; the shopper sees only its last two digits and can replace it. If it does not match, the shopper is asked to enter it.</> },
           { name: 'return_url', type: 'URL (≤2048)', required: true, description: 'Where the customer is sent after the hosted checkout. Its origin must be on your approved list (HTTPS in production).' },
           { name: 'cancel_url', type: 'URL (≤2048)', required: true, description: 'Where the customer is sent if they abandon checkout. Same origin rules as return_url.' },
           { name: 'revises_session_id', type: 'string', description: <>Replace an active session for the same order with a revised cart. See <a href="#revised-carts">revised carts</a>.</> },

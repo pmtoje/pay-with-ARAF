@@ -113,7 +113,12 @@ export function toE164(phone: string): string | null {
  * Create a Pay with ARAF checkout session for an existing AltMall order (server-side, secret key).
  * Returns the hosted checkout URL to redirect the shopper to.
  */
-export async function startArafCheckout(order: OrderRow, customerEmail: string): Promise<{ ok: true; checkoutUrl: string } | { ok: false; title: string; lines: string[]; code: string }> {
+/**
+ * AltMall passes Pay with ARAF everything it already knows about the shopper so the Bank's checkout
+ * only asks for what is missing. Identity details (date of birth, BVN) are optional, sent
+ * server-to-server only, and never stored by AltMall.
+ */
+export async function startArafCheckout(order: OrderRow, customerEmail: string, identity: { date_of_birth?: string; bvn?: string } = {}): Promise<{ ok: true; checkoutUrl: string } | { ok: false; title: string; lines: string[]; code: string }> {
   const items = await orderItems(order.id);
   const attempt = order.araf_attempts + 1;
   const idempotencyKey = attempt === 1 ? `altmall-${order.reference}` : `altmall-${order.reference}-retry-${attempt}`;
@@ -126,7 +131,14 @@ export async function startArafCheckout(order: OrderRow, customerEmail: string):
         currency: 'NGN',
         amount,
         items: items.map((i) => ({ sku: i.sku, name: i.name, quantity: i.qty, unit_amount: Number(i.unit_kobo), category: i.category, vendor_reference: i.vendor_reference })),
-        customer: { email: customerEmail, phone: toE164(order.delivery_phone) ?? undefined },
+        customer: {
+          email: customerEmail,
+          phone: toE164(order.delivery_phone) ?? undefined,
+          ...splitName(order.delivery_name),
+          address: { line1: order.delivery_address, city: order.delivery_city, state: order.delivery_state },
+          ...(identity.date_of_birth ? { date_of_birth: identity.date_of_birth } : {}),
+          ...(identity.bvn ? { bvn: identity.bvn } : {}),
+        },
         return_url: `${config.altmallUrl}/orders/${order.reference}?from=araf`,
         cancel_url: `${config.altmallUrl}/cart?araf=cancelled&order=${order.reference}`,
       },
@@ -149,6 +161,11 @@ export async function startArafCheckout(order: OrderRow, customerEmail: string):
     if (order.araf_attempts === 0 && !order.araf_session_id) await query(`UPDATE orders SET status = 'FINANCING_FAILED', updated_at = now() WHERE id = $1`, [order.id]);
     return { ok: false, ...f };
   }
+}
+
+function splitName(full: string): { first_name?: string; last_name?: string } {
+  const parts = full.trim().split(/\s+/);
+  return parts.length >= 2 ? { first_name: parts[0], last_name: parts.slice(1).join(' ') } : {};
 }
 
 export interface SyncResult {

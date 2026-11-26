@@ -15,6 +15,8 @@ export interface PlaceOrderInput {
   lines: Array<{ sku: string; qty: number }>;
   delivery: { name: string; phone: string; address: string; city: string; state: string };
   method: PaymentMethod;
+  /** Optional, Buy Now Pay Later only: passed to the Bank once, never stored by AltMall. */
+  identity?: { date_of_birth?: string; bvn?: string };
 }
 
 export type PlaceOrderResult =
@@ -60,7 +62,12 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
   revalidatePath('/orders');
   if (input.method !== 'araf') return { ok: true, reference: order.reference, redirect: `/orders/${order.reference}?placed=1`, external: false };
 
-  const started = await startArafCheckout(order, customer.email);
+  const id = input.identity ?? {};
+  const identity = {
+    ...(id.date_of_birth && /^\d{4}-\d{2}-\d{2}$/.test(id.date_of_birth) ? { date_of_birth: id.date_of_birth } : {}),
+    ...(id.bvn && /^\d{11}$/.test(id.bvn) ? { bvn: id.bvn } : {}),
+  };
+  const started = await startArafCheckout(order, customer.email, identity);
   if (!started.ok) return { ok: false, title: started.title, lines: started.lines, reference: order.reference };
   // The shopper stays on AltMall: the order page opens the Bank's checkout in an embedded panel.
   return { ok: true, reference: order.reference, redirect: `/orders/${order.reference}?pay=araf`, external: false };
