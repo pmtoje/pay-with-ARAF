@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Alert, Button, CopyButton, Field, Input, KeyValue, LoadingBlock, OtpInput, Stepper } from '@araf/ui';
+import { Alert, Button, CopyButton, Field, Input, KeyValue, LoadingBlock, OtpInput, Stepper, TotpQr } from '@araf/ui';
 import { api, isApiError } from '@/lib/api';
 import { FormError } from '@/components/common';
 import { ROLE_LABEL } from '@/lib/session';
@@ -145,10 +145,11 @@ export default function InvitePage() {
         <form onSubmit={activate} className="space-y-5">
           <div className="space-y-3">
             <p className="text-sm text-fg">
-              Add this account to an authenticator app (e.g. Google Authenticator, Microsoft Authenticator, 1Password) using the setup key below, then enter the 6-digit code it shows.
+              Scan the QR code with an authenticator app (e.g. Google Authenticator, Microsoft Authenticator, Authy), then enter the 6-digit code it shows.
             </p>
+            <TotpQr uri={enrol.otpauth_uri} />
             <div className="rounded-md border border-border bg-surface-2 p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-subtle">Setup key</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-subtle">Can’t scan? Enter this key in the app</p>
               <p className="mt-1 break-all font-mono text-base font-semibold tracking-wider text-fg">{enrol.totp_secret.replace(/(.{4})/g, '$1 ').trim()}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <CopyButton value={enrol.totp_secret} label="Copy key" />

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Alert, ApiError, Badge, Button, Card, CopyButton, Field, Input, LoadingBlock, OtpInput, Stepper, cn } from '@araf/ui';
+import { Alert, ApiError, Badge, Button, Card, CopyButton, Field, Input, LoadingBlock, OtpInput, Stepper, cn, TotpQr } from '@araf/ui';
 import { authApi } from '@/lib/api';
 import { roleLabel } from '@/lib/labels';
 import { ErrorAlert } from '@/components/common';
@@ -123,22 +123,23 @@ export default function InvitePage() {
       {step === 1 && totp && (
         <>
           <h1 className="mt-1 text-xl font-semibold tracking-tight">Set up two-factor authentication</h1>
-          <p className="mt-1 text-sm text-muted">Add this account to your authenticator app (time-based, 6 digits), then enter the current code.</p>
+          <p className="mt-1 text-sm text-muted">Scan the QR code with your authenticator app, then enter the 6-digit code it shows.</p>
           <div className="mt-5 space-y-3">
+            <TotpQr uri={totp.otpauth_uri} />
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-subtle">Secret key</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-subtle">Can’t scan? Enter this key in the app</p>
               <div className="mt-1 flex items-center gap-2">
                 <code className="flex-1 break-all rounded-md border border-border bg-surface-2 px-3 py-2 font-mono text-sm tracking-wider">{totp.totp_secret.match(/.{1,4}/g)?.join(' ')}</code>
                 <CopyButton value={totp.totp_secret} />
               </div>
             </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-subtle">Setup URI (otpauth)</p>
+            <details>
+              <summary className="cursor-pointer text-xs text-muted">Show setup URI (otpauth)</summary>
               <div className="mt-1 flex items-center gap-2">
                 <code className="flex-1 break-all rounded-md border border-border bg-surface-2 px-3 py-2 font-mono text-2xs">{totp.otpauth_uri}</code>
                 <CopyButton value={totp.otpauth_uri} />
               </div>
-            </div>
+            </details>
             <Alert tone="warning">The secret is shown only once. Do not share it or store it with your password.</Alert>
           </div>
           <form className="mt-5 space-y-4" onSubmit={(e) => { e.preventDefault(); void activate(); }}>
