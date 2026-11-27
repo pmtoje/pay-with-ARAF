@@ -101,7 +101,7 @@ export function EnhancedReviewStep() {
         <Why>Your answers are kept confidential and never shared with the merchant.</Why>
         <ErrorNotice error={error} />
         <Button type="submit" size="lg" block loading={busy === 'submit'}>
-          Send to the Bank for review
+          Continue my application
         </Button>
       </form>
     </StepCard>
