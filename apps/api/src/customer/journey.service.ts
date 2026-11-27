@@ -289,8 +289,6 @@ export class JourneyService {
         lastNameEnc: this.crypto.encrypt(lookup.lastName, `idv:${applicationId}`),
       },
     });
-    // The code goes to the email the merchant supplied for this order; if none was supplied,
-    // it falls back to the phone linked to the BVN record.
     const sent = await this.issueOtp(app, 'IDENTITY', lookup.phone, req, verification.id);
     return { otp_sent_to: sent.sentTo, expires_in_seconds: OTP_TTL_MS / 1000, resend_available_in_seconds: OTP_RESEND_MS / 1000, challenge_id: sent.id };
   }
@@ -299,7 +297,10 @@ export class JourneyService {
     const last = await this.prisma.otpChallenge.findFirst({ where: { applicationId: app.id, purpose, consumedAt: null, invalidatedAt: null }, orderBy: { createdAt: 'desc' } });
     if (last && last.resendAvailableAt.getTime() > Date.now()) throw new AppError('OTP_RESEND_COOLDOWN', { retry_after_seconds: Math.ceil((last.resendAvailableAt.getTime() - Date.now()) / 1000) });
     await this.rateLimit.hit(`otp-send:${app.id}`, 6, 3600);
-    const order = await this.prisma.merchantOrder.findUnique({ where: { id: app.orderId }, select: { customerEmail: true } });
+    // Codes go to the phone linked to the BVN record — that is what proves the shopper holds the BVN. A
+    // sandbox demo without an SMS gateway may opt in to the merchant-supplied email (never for production).
+    const emailAllowed = app.environment === 'SANDBOX' && this.config.SANDBOX_OTP_VIA_MERCHANT_EMAIL;
+    const order = emailAllowed ? await this.prisma.merchantOrder.findUnique({ where: { id: app.orderId }, select: { customerEmail: true } }) : null;
     const email = order?.customerEmail?.trim() || null;
     const channel = email ? 'EMAIL' : 'SMS';
     const destination = email ?? phone;

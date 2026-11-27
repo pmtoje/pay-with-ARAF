@@ -54,6 +54,12 @@ const schema = z.object({
   ARAF_SSO_ENABLED: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   /** Comma-separated email domains allowed for Bank staff (e.g. altbank.ng). */
   STAFF_EMAIL_DOMAINS: z.string().default('altbank.ng,sandbox.altbank.example'),
+  /**
+   * SANDBOX ONLY, for demo deployments without an SMS gateway: send customer one-time codes to the email the
+   * merchant supplied instead of the BVN-linked phone. Never allowed for production records — the code sent
+   * to the BVN-linked phone is what proves the shopper holds the BVN.
+   */
+  SANDBOX_OTP_VIA_MERCHANT_EMAIL: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 });
 
 export type AppConfig = z.infer<typeof schema> & {
@@ -94,6 +100,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if ((c.ARAF_MODE === 'connected' || c.ARAF_SSO_ENABLED) && (!c.ARAF_BASE_URL || !c.ARAF_INTEGRATION_SECRET)) problems.push('ARAF_BASE_URL and ARAF_INTEGRATION_SECRET are required to connect to ARAF');
   if (isProd && c.ARAF_BASE_URL && !c.ARAF_BASE_URL.startsWith('https://')) problems.push('ARAF_BASE_URL must use https');
   if (isProd && c.STAFF_EMAIL_DOMAINS.split(',').some((d) => d.trim().endsWith('.example'))) problems.push('STAFF_EMAIL_DOMAINS must not include example domains in production');
+  if (c.SANDBOX_OTP_VIA_MERCHANT_EMAIL && (isProd || c.PLATFORM_ENVIRONMENT === 'PRODUCTION')) problems.push('SANDBOX_OTP_VIA_MERCHANT_EMAIL is sandbox-only');
   if (problems.length) throw new Error(`Unsafe configuration refused: ${problems.join('; ')}`);
   const isSandbox = c.PLATFORM_ENVIRONMENT === 'SANDBOX';
   return { ...c, API_PORT: apiPort, isSandbox, sandboxToolsEnabled: isSandbox && !isProd, staffEmailDomains: c.STAFF_EMAIL_DOMAINS.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean) };

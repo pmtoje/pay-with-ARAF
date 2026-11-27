@@ -113,9 +113,10 @@ again with `RESEND_INVITES=true`. Links are never printed to logs.
 ## Email (Resend)
 Set `RESEND_API_KEY` and `EMAIL_FROM` (a verified Resend sender, e.g. `no-reply@pay.araf.ng`). EMAIL
 notifications and one-time codes are sent through Resend; SMS remains on the sandbox inbox in
-sandbox. Invitation links and OTP codes are never persisted in notification history. The customer
-code goes to the order's `customerEmail`; if the merchant did not supply one it falls back to the
-BVN-linked phone by SMS.
+sandbox. Invitation links and OTP codes are never persisted in notification history. Customer one-time
+codes go to the **phone linked to the BVN** (that is what proves the shopper holds the BVN). A sandbox
+demo with no SMS gateway may set `SANDBOX_OTP_VIA_MERCHANT_EMAIL=true` to send them to the email the
+merchant supplied instead; the API refuses to start with that setting for production records.
 
 ## Database migrations
 Prisma migrations in `packages/database/prisma/migrations` (including a hand-written integrity
