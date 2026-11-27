@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AppShell, Badge, LoadingBlock, SandboxBanner, ThemeToggle, cn, formatDateTime, type NavItem } from '@araf/ui';
+import { AppShell, Badge, LoadingBlock, ThemeToggle, cn, formatDateTime, type NavItem } from '@araf/ui';
 import { api, useApi } from '@/lib/api';
 import { ROLE_LABEL, useSession } from '@/lib/session';
 import type { PartnerNotification, Permission } from '@/lib/types';
@@ -33,13 +33,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
           {content}
         </Link>
       )}
-      banner={me.sandbox ? <SandboxBanner note={me.partner ? `${me.partner.tradingName} · ${me.partner.partnerCode}` : undefined} /> : undefined}
       topRight={
         <>
           {me.partner && (
             <span className="mr-1 hidden items-center gap-2 text-sm text-muted md:inline-flex">
               <span className="font-medium text-fg">{me.partner.tradingName}</span>
-              <Badge tone={me.environment === 'SANDBOX' ? 'warning' : 'success'}>{me.environment === 'SANDBOX' ? 'Sandbox' : 'Live'}</Badge>
+              {me.environment === 'PRODUCTION' && <Badge tone="success">Live</Badge>}
             </span>
           )}
           {can('p.dashboard.read') && <NotificationsBell />}

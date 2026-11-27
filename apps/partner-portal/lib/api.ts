@@ -13,7 +13,7 @@ export const api = createApiClient({
     if (PUBLIC_PATHS.some((p) => window.location.pathname.startsWith(p))) return;
     if (!['UNAUTHENTICATED', 'SESSION_EXPIRED', 'MFA_REQUIRED'].includes(err.code)) return;
     const next = encodeURIComponent(window.location.pathname + window.location.search);
-    window.location.href = `/login?next=${next}${err.code === 'SESSION_EXPIRED' ? '&expired=1' : ''}`;
+    window.location.href = `/login?next=${next}`;
   },
 });
 

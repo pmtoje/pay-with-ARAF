@@ -31,6 +31,10 @@ const schema = z.object({
   OTP_PEPPER: z.string().min(32),
   STATE_TOKEN_KEY: z.string().min(32),
   INTERNAL_CALLBACK_SECRET: z.string().min(32),
+  /** Resend (email) — set both to deliver EMAIL notifications/OTP through Resend instead of the sandbox inbox. */
+  RESEND_API_KEY: z.string().min(1).optional(),
+  /** A verified Resend sender, e.g. `no-reply@araf.ng` or `Pay with ARAF <no-reply@araf.ng>`. */
+  EMAIL_FROM: z.string().min(3).optional(),
   STORAGE_DIR: z.string().default('./storage'),
   COOKIE_SECURE: z.enum(['true', 'false']).transform((v) => v === 'true'),
   WEBHOOK_ALLOW_PRIVATE_NETWORKS: z.enum(['true', 'false']).transform((v) => v === 'true'),
@@ -85,6 +89,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (c.PLATFORM_ENVIRONMENT === 'PRODUCTION' && !isProd) problems.push('PRODUCTION records may only be served by APP_ENV=production');
   if (c.LIVE_OPERATIONS_ENABLED && !isProd) problems.push('LIVE_OPERATIONS_ENABLED is only valid in production');
   if (!(c.ENCRYPTION_ACTIVE_KEY in c.ENCRYPTION_KEYS)) problems.push('ENCRYPTION_ACTIVE_KEY not present in ENCRYPTION_KEYS');
+  if (c.RESEND_API_KEY && !c.EMAIL_FROM) problems.push('EMAIL_FROM is required when RESEND_API_KEY is set');
+  if (!c.RESEND_API_KEY && c.EMAIL_FROM) problems.push('RESEND_API_KEY is required when EMAIL_FROM is set');
   if ((c.ARAF_MODE === 'connected' || c.ARAF_SSO_ENABLED) && (!c.ARAF_BASE_URL || !c.ARAF_INTEGRATION_SECRET)) problems.push('ARAF_BASE_URL and ARAF_INTEGRATION_SECRET are required to connect to ARAF');
   if (isProd && c.ARAF_BASE_URL && !c.ARAF_BASE_URL.startsWith('https://')) problems.push('ARAF_BASE_URL must use https');
   if (isProd && c.STAFF_EMAIL_DOMAINS.split(',').some((d) => d.trim().endsWith('.example'))) problems.push('STAFF_EMAIL_DOMAINS must not include example domains in production');

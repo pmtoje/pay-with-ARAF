@@ -70,17 +70,17 @@ export function ResumeStep() {
         <div className="space-y-4">
           <div className="flex items-start gap-3 rounded-md bg-surface-2 px-4 py-3 text-sm text-muted">
             <LockIcon className="mt-0.5 h-4 w-4 shrink-0 text-gold-strong" />
-            <span>We’ll send a 6-digit code to the phone number linked to the BVN you verified with. Nothing you’ve completed will be lost.</span>
+            <span>We’ll send a 6-digit code to the email on your application. Nothing you’ve completed will be lost.</span>
           </div>
           <ErrorNotice error={error} />
           <Button size="lg" block loading={busy === 'send'} onClick={() => void send()}>
-            Send a code to my BVN-linked phone
+            Send a code to my email
           </Button>
         </div>
       ) : (
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); verify(); }}>
           <p className="text-sm text-muted" role="status" aria-live="polite">
-            {sent.to ? <>Code sent to <span className="font-medium text-fg">{sent.to}</span>.</> : 'A code was sent recently to your BVN-linked phone.'} It expires in 5 minutes.
+            {sent.to ? <>Code sent to <span className="font-medium text-fg">{sent.to}</span>.</> : 'A code was sent recently to your email.'} It expires in 5 minutes.
           </p>
           <OtpInput value={code} onChange={setCode} disabled={busy === 'verify'} label="6-digit verification code" />
           <div className="flex flex-wrap items-center justify-between gap-3">

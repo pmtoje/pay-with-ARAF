@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   ArafHttpProvider,
+  EmailRoutingNotificationProvider,
   EncryptedFileStorage,
   IntegrationNotConfiguredError,
   ProviderError,
+  ResendEmailProvider,
   SandboxAccountOpeningProvider,
   SandboxAltBankProvider,
   SandboxIdentityProvider,
@@ -19,6 +21,7 @@ import {
   type ArafStatusReport,
   type ArafWorkflowProvider,
   type CallContext,
+  type NotificationProvider,
   type ProviderSet,
   type SimStore,
 } from '@araf/integrations';
@@ -112,6 +115,11 @@ export class ProvidersService {
       },
     };
     const altbank = new SandboxAltBankProvider(deps);
+    const emailProvider: NotificationProvider | null =
+      config.RESEND_API_KEY && config.EMAIL_FROM
+        ? new ResendEmailProvider({ apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM })
+        : null;
+    const sandboxNotifications = new SandboxNotificationProvider(deps);
     this.sandbox = {
       identity: new SandboxIdentityProvider(),
       credit: new SandboxSeedFiProvider(),
@@ -123,10 +131,13 @@ export class ProvidersService {
       araf: new SandboxArafProvider(prisma),
       remita: new SandboxRemitaProvider(deps),
       payments: new SandboxPaymentProvider(deps),
-      notifications: new SandboxNotificationProvider(deps),
+      notifications: emailProvider ? new EmailRoutingNotificationProvider(emailProvider, sandboxNotifications) : sandboxNotifications,
       malware: new SandboxMalwareScanner(),
     };
-    this.live = liveProviders();
+    const live = liveProviders();
+    this.live = emailProvider
+      ? { ...live, notifications: new EmailRoutingNotificationProvider(emailProvider, live.notifications) }
+      : live;
     // Connected to the real AltBank Retail Asset Factory: both environments use it instead of the simulator.
     if (config.ARAF_MODE === 'connected' && config.ARAF_BASE_URL && config.ARAF_INTEGRATION_SECRET) {
       this.connectedAraf = new ArafHttpProvider({ baseUrl: config.ARAF_BASE_URL, secret: config.ARAF_INTEGRATION_SECRET });

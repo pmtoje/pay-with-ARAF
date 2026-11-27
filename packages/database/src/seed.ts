@@ -32,6 +32,8 @@ export const SANDBOX_STAFF: Array<{ email: string; name: string; roles: string[]
   { email: `auditor@${SANDBOX_STAFF_DOMAIN}`, name: 'Audu Auditor', roles: ['INTERNAL_AUDITOR'] },
   { email: `developer@${SANDBOX_STAFF_DOMAIN}`, name: 'Dayo Developer', roles: ['BANK_DEVELOPER'] },
   { email: `management@${SANDBOX_STAFF_DOMAIN}`, name: 'Mojisola Management', roles: ['MANAGEMENT_READONLY'] },
+  { email: 'tomiwa.adebanjo@altbank.ng', name: 'Tomiwa Adebanjo', roles: ['SUPER_ADMIN'] },
+  { email: 'paul.toje@altbank.ng', name: 'Paul Toje', roles: ['SUPER_ADMIN'] },
 ];
 
 /** Deterministic sandbox TOTP secret per demo email (sandbox only, documented). */
@@ -40,6 +42,7 @@ export function sandboxTotpSecret(email: string): string {
 }
 
 const TEMPLATES: Array<{ code: string; channel: string; audience: string; subject: string; body: string }> = [
+  { code: 'USER_INVITATION', channel: 'EMAIL', audience: 'PARTNER', subject: 'You have been invited to Pay with ARAF', body: 'Hello {{full_name}},\n\nYou have been invited to the Pay with ARAF {{portal}}.\n\nAccept your invitation: {{link}}\n\nThis link expires in 7 days. If you were not expecting it, ignore this email.' },
   { code: 'IDENTITY_OTP', channel: 'SMS', audience: 'CUSTOMER', subject: 'Pay with ARAF verification code', body: 'Your Pay with ARAF code is {{code}}. It expires in 5 minutes. Never share this code. The Alternative Bank will never ask for it.' },
   { code: 'ADDITIONAL_INFO_REQUIRED', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'More information needed for your financing application', body: 'Your application {{reference}} needs a little more information. Continue securely from your Pay with ARAF link.' },
   { code: 'ACCOUNT_OPENING_PENDING', channel: 'EMAIL', audience: 'CUSTOMER', subject: 'Complete your account opening', body: 'Complete your Alternative Bank account opening to continue application {{reference}}.' },

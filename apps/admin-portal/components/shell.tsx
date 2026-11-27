@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { AppShell, Badge, Button, Dialog, LoadingBlock, SandboxBanner, ThemeToggle, formatDateTime, type NavItem } from '@araf/ui';
+import { AppShell, Badge, Button, Dialog, LoadingBlock, ThemeToggle, formatDateTime, type NavItem } from '@araf/ui';
 import { api } from '@/lib/api';
 import { useApi } from '@/lib/hooks';
 import { useSession } from '@/lib/session';
@@ -52,7 +52,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
       product="Admin"
       nav={nav}
       activeHref={pathname}
-      banner={me.sandbox ? <SandboxBanner note="Bank administration portal" /> : undefined}
       renderLink={(item, className, content, onClick) => (
         <Link href={item.href} className={className} onClick={onClick} aria-current={pathname === item.href ? 'page' : undefined}>
           {content}
@@ -60,10 +59,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
       )}
       topRight={
         <>
-          <span className="mr-1 hidden items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-2xs font-semibold uppercase tracking-wider text-muted md:inline-flex">
-            <span className={me.environment === 'PRODUCTION' ? 'text-danger' : 'text-warning'}>{Icon.dot()}</span>
-            {me.environment}
-          </span>
+          {me.environment === 'PRODUCTION' && (
+            <span className="mr-1 hidden items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-2xs font-semibold uppercase tracking-wider text-muted md:inline-flex">
+              <span className="text-danger">{Icon.dot()}</span>
+              PRODUCTION
+            </span>
+          )}
           <NotificationsBell />
           <ThemeToggle />
           <UserMenu />

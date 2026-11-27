@@ -4,4 +4,5 @@ export * from './sandbox/statements';
 export * from './sandbox/providers';
 export * from './live/live';
 export * from './live/araf-http';
+export * from './live/resend';
 export * from './storage';

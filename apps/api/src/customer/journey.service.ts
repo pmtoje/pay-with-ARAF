@@ -4,7 +4,7 @@ import type { Response } from 'express';
 import { z } from 'zod';
 import { classifyScore, customerCreditMessage, isAgeEligible, isValidBvnFormat, type ApplicationState } from '@araf/business-rules';
 import { ProviderError, APP_IDENTITY } from '@araf/integrations';
-import { generateNumericOtp, hashOtp, maskAccountNumber, maskPhone, randomToken, safeEqual, sha256Hex, signStateToken, verifyOtp, verifyStateToken, hmacSha256Hex } from '@araf/security';
+import { generateNumericOtp, hashOtp, maskAccountNumber, maskEmail, maskPhone, randomToken, safeEqual, sha256Hex, signStateToken, verifyOtp, verifyStateToken, hmacSha256Hex } from '@araf/security';
 import type { FinancingApplication } from '@araf/database';
 import { CONFIG, type AppConfig } from '../config';
 import { AppError, fail } from '../common/errors';
@@ -289,15 +289,21 @@ export class JourneyService {
         lastNameEnc: this.crypto.encrypt(lookup.lastName, `idv:${applicationId}`),
       },
     });
-    // OTP goes ONLY to the phone linked to the BVN record, never to a phone typed at checkout.
+    // The code goes to the email the merchant supplied for this order; if none was supplied,
+    // it falls back to the phone linked to the BVN record.
     const sent = await this.issueOtp(app, 'IDENTITY', lookup.phone, req, verification.id);
-    return { otp_sent_to: maskPhone(lookup.phone), expires_in_seconds: OTP_TTL_MS / 1000, resend_available_in_seconds: OTP_RESEND_MS / 1000, challenge_id: sent };
+    return { otp_sent_to: sent.sentTo, expires_in_seconds: OTP_TTL_MS / 1000, resend_available_in_seconds: OTP_RESEND_MS / 1000, challenge_id: sent.id };
   }
 
   async issueOtp(app: FinancingApplication, purpose: 'IDENTITY' | 'RESUME' | 'DOCUMENT_SIGNING' | 'SALE_CONTRACT', phone: string, req: AuthedRequest, identityVerificationId?: string) {
     const last = await this.prisma.otpChallenge.findFirst({ where: { applicationId: app.id, purpose, consumedAt: null, invalidatedAt: null }, orderBy: { createdAt: 'desc' } });
     if (last && last.resendAvailableAt.getTime() > Date.now()) throw new AppError('OTP_RESEND_COOLDOWN', { retry_after_seconds: Math.ceil((last.resendAvailableAt.getTime() - Date.now()) / 1000) });
     await this.rateLimit.hit(`otp-send:${app.id}`, 6, 3600);
+    const order = await this.prisma.merchantOrder.findUnique({ where: { id: app.orderId }, select: { customerEmail: true } });
+    const email = order?.customerEmail?.trim() || null;
+    const channel = email ? 'EMAIL' : 'SMS';
+    const destination = email ?? phone;
+    const destinationMasked = email ? maskEmail(email) : maskPhone(phone);
     const code = generateNumericOtp(6);
     const id = crypto.randomUUID();
     await this.prisma.$transaction(async (tx) => {
@@ -311,8 +317,8 @@ export class JourneyService {
           identityVerificationId: identityVerificationId ?? null,
           customerSessionId: req.customer!.sessionId,
           codeHash: hashOtp(code, id, this.config.OTP_PEPPER),
-          channel: 'SMS',
-          destinationMasked: maskPhone(phone),
+          channel,
+          destinationMasked,
           maxAttempts: OTP_MAX_ATTEMPTS,
           expiresAt: new Date(Date.now() + OTP_TTL_MS),
           resendAvailableAt: new Date(Date.now() + OTP_RESEND_MS),
@@ -322,12 +328,12 @@ export class JourneyService {
     // Sent synchronously (never through the outbox) so the code is not persisted anywhere.
     await this.providers.call(app.environment, 'NOTIFICATIONS', 'send_otp', this.callCtx(app, req), () =>
       this.providers.for(app.environment).notifications.send(
-        { channel: 'SMS', destination: phone, subject: 'Pay with ARAF verification code', body: `Your Pay with ARAF code is ${code}. It expires in 5 minutes. Never share this code.`, applicationReference: app.reference },
+        { channel, destination, subject: 'Pay with ARAF verification code', body: `Your Pay with ARAF code is ${code}. It expires in 5 minutes. Never share this code.`, applicationReference: app.reference },
         this.callCtx(app, req),
       ),
     );
-    await this.audit.record(req.actor, { action: 'customer.otp_sent', resourceType: 'APPLICATION', resourceId: app.id, after: { purpose, destination: maskPhone(phone) } });
-    return id;
+    await this.audit.record(req.actor, { action: 'customer.otp_sent', resourceType: 'APPLICATION', resourceId: app.id, after: { purpose, destination: destinationMasked } });
+    return { id, sentTo: destinationMasked, channel };
   }
 
   /** Validate and consume an OTP bound to this application, purpose and browser session. */
@@ -398,8 +404,8 @@ export class JourneyService {
     const verification = await this.prisma.identityVerification.findFirst({ where: { applicationId, status: 'VERIFIED' }, orderBy: { createdAt: 'desc' } });
     if (!verification?.phoneEncrypted) throw new AppError('INVALID_STATE');
     const phone = this.crypto.decrypt(verification.phoneEncrypted, `idv:${applicationId}`);
-    await this.issueOtp(app, 'RESUME', phone, req);
-    return { otp_sent_to: maskPhone(phone), expires_in_seconds: OTP_TTL_MS / 1000 };
+    const sent = await this.issueOtp(app, 'RESUME', phone, req);
+    return { otp_sent_to: sent.sentTo, expires_in_seconds: OTP_TTL_MS / 1000 };
   }
 
   async verifyResumeOtp(applicationId: string, body: unknown, req: AuthedRequest) {

@@ -11,9 +11,10 @@
  */
 import { createHash, createHmac } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(new URL('.', import.meta.url).pathname, '..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const envFile = process.env.ARAF_ENV_FILE ?? '.env';
 const envPath = resolve(root, envFile);
 if (!existsSync(envPath)) throw new Error(`Environment file not found: ${envFile} (create it or set ARAF_ENV_FILE)`);

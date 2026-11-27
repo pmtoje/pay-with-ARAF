@@ -12,6 +12,7 @@ import { AuditService, ReferenceService, type Actor } from '../common/core.servi
 import { ProvidersService } from '../common/providers.service';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const text = (max = 200) => z.string().trim().min(1).max(max);
 const naira = z.number().int().positive();
@@ -101,6 +102,7 @@ export class PartnersService implements OnModuleInit {
     private readonly approvals: ApprovalsService,
     private readonly providers: ProvidersService,
     private readonly webhooks: WebhooksService,
+    private readonly notifications: NotificationsService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -476,7 +478,16 @@ export class PartnersService implements OnModuleInit {
     });
     const portal = input.type === 'STAFF' ? this.config.ADMIN_PORTAL_URL : this.config.PARTNER_PORTAL_URL;
     const link = `${portal}/invite/${token}`;
-    // Sandbox: the invitation link is delivered to the sandbox inbox (email integration not configured).
+    await this.notifications.enqueue(tx, {
+      environment: this.config.PLATFORM_ENVIRONMENT,
+      audience: input.type === 'STAFF' ? 'BANK' : 'PARTNER',
+      templateCode: 'USER_INVITATION',
+      channel: 'EMAIL',
+      destination: input.email.toLowerCase(),
+      partnerId: input.partnerId ?? null,
+      vars: { full_name: input.fullName, link, portal: input.type === 'STAFF' ? 'admin portal' : 'merchant portal' },
+    });
+    // Sandbox: keep the link in the message inbox for reviewers; Resend also delivers it when configured.
     if (this.config.isSandbox) {
       await tx.sandboxMessage.create({ data: { channel: 'EMAIL', destination: input.email.toLowerCase(), body: `You have been invited to Pay with ARAF.\n\nAccept your invitation: ${link}` } });
     }

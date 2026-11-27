@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, SandboxBanner, Skeleton, Stepper, createApiClient, formatNaira } from '@araf/ui';
+import { Alert, Button, Skeleton, Stepper, createApiClient, formatNaira } from '@araf/ui';
 import { base as baseOf, errorCode, safeHref, type Api } from '@/lib/api';
 import { FAST_POLL, SLOW_POLL, STEPS, stageIndex } from '@/lib/journey';
 import type { Summary, View } from '@/lib/types';
@@ -282,7 +282,6 @@ export function CheckoutApp({ sessionId, returnAction }: { sessionId: string; re
   return (
     <CheckoutContextProvider value={ctx}>
       <div className="min-h-screen bg-bg">
-        {summary.sandbox && <SandboxBanner />}
         <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2">
           Skip to content
         </a>
@@ -354,7 +353,6 @@ export function CheckoutApp({ sessionId, returnAction }: { sessionId: string; re
 function LoadingScreen({ summary }: { summary: Summary | null }) {
   return (
     <div className="min-h-screen bg-bg">
-      {summary?.sandbox && <SandboxBanner />}
       <div className="border-b border-border bg-surface">
         <div className="mx-auto flex h-16 max-w-5xl items-center px-4 sm:px-6">
           <Skeleton className="h-8 w-40" />
@@ -389,7 +387,6 @@ function UnavailableScreen({ summary, phase, onRetry }: { summary: Summary | nul
   const title = superseded ? 'Your cart was updated' : expired ? 'This checkout has expired' : notFound ? 'Checkout not found' : 'We could not load your checkout';
   return (
     <div className="min-h-screen bg-bg">
-      {summary?.sandbox && <SandboxBanner />}
       <main id="main" className="mx-auto flex max-w-lg flex-col px-4 py-12 sm:py-20">
         <div className="rounded-lg border border-border bg-surface p-6 sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gold-strong">Pay with ARAF</p>

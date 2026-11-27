@@ -1,13 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Logo, SandboxBanner, ThemeToggle } from '@araf/ui';
+import { Logo, ThemeToggle } from '@araf/ui';
 
 /** Centered frame for sign-in and invitation screens. */
 export function AuthFrame({ title, description, children, footer }: { title: string; description?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-bg">
-      <SandboxBanner />
       <header className="flex items-center justify-between px-4 py-4 sm:px-8">
         <Logo product="Partner" />
         <ThemeToggle />
