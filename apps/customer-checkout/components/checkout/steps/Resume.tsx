@@ -80,7 +80,7 @@ export function ResumeStep() {
       ) : (
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); verify(); }}>
           <p className="text-sm text-muted" role="status" aria-live="polite">
-            {sent.to ? <>Code sent to <span className="font-medium text-fg">{sent.to}</span>.</> : 'A code was sent recently to your email.'} It expires in 5 minutes.
+            {sent.to ? <>Code sent to <span className="font-medium text-fg">{sent.to}</span>.</> : 'A code was sent recently to the phone linked to your BVN.'} It expires in 5 minutes.
           </p>
           <OtpInput value={code} onChange={setCode} disabled={busy === 'verify'} label="6-digit verification code" />
           <div className="flex flex-wrap items-center justify-between gap-3">

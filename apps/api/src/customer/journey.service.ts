@@ -38,22 +38,31 @@ const OTP_RESEND_MS = 60_000;
 const OTP_MAX_ATTEMPTS = 5;
 const IDENTITY_MAX_LOOKUPS = 5;
 
+/**
+ * Fair-credit / thin-file review: ask only what the Bank does not already have. Income and existing repayments
+ * come from SeedFi and the statement analysis, the address from the merchant or the BVN record. The older optional
+ * fields are still accepted (earlier clients) but never required.
+ */
 const enhancedSchema = z
   .object({
     employment_status: z.enum(['EMPLOYED', 'SELF_EMPLOYED', 'CONTRACT', 'OTHER']),
     employer_name: z.string().trim().max(120).optional(),
     employment_duration_months: z.number().int().min(0).max(600).optional(),
-    job_role: z.string().trim().max(120).optional(),
-    monthly_income_naira: z.number().int().min(0).max(1_000_000_000),
     business_name: z.string().trim().max(120).optional(),
     nature_of_business: z.string().trim().max(200).optional(),
     business_duration_months: z.number().int().min(0).max(600).optional(),
-    residential_address: z.string().trim().min(5).max(300),
-    accommodation_type: z.enum(['OWNED', 'RENTED', 'FAMILY', 'EMPLOYER_PROVIDED', 'OTHER']),
-    dependants: z.number().int().min(0).max(30),
-    existing_obligations_naira: z.number().int().min(0).max(1_000_000_000),
+    job_role: z.string().trim().max(120).optional(),
+    monthly_income_naira: z.number().int().min(0).max(1_000_000_000).optional(),
+    residential_address: z.string().trim().min(5).max(300).optional(),
+    accommodation_type: z.enum(['OWNED', 'RENTED', 'FAMILY', 'EMPLOYER_PROVIDED', 'OTHER']).optional(),
+    dependants: z.number().int().min(0).max(30).optional(),
+    existing_obligations_naira: z.number().int().min(0).max(1_000_000_000).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((v, ctx) => {
+    if ((v.employment_status === 'EMPLOYED' || v.employment_status === 'CONTRACT') && !v.employer_name) ctx.addIssue({ code: 'custom', path: ['employer_name'], message: 'Required' });
+    if (v.employment_status === 'SELF_EMPLOYED' && !v.business_name) ctx.addIssue({ code: 'custom', path: ['business_name'], message: 'Required' });
+  });
 
 export interface MerchantPrefill {
   email?: string;
@@ -533,7 +542,7 @@ export class JourneyService {
       } else if (outcome === 'ENHANCED_REVIEW' || outcome === 'MANUAL_REVIEW') {
         await this.state.transitionApplication(tx, locked, 'ENHANCED_REVIEW_REQUIRED', SYSTEM_ACTOR, { reason: band === 'NO_SCORE' ? 'THIN_FILE' : 'FAIR_CREDIT' });
         await tx.enhancedReview.create({
-          data: { applicationId, queue: band === 'NO_SCORE' ? 'THIN_FILE' : 'FAIR_CREDIT', status: 'AWAITING_CUSTOMER', requestedFields: Object.keys(enhancedSchema.shape), slaDueAt: new Date(Date.now() + 48 * 3600_000) },
+          data: { applicationId, queue: band === 'NO_SCORE' ? 'THIN_FILE' : 'FAIR_CREDIT', status: 'AWAITING_CUSTOMER', requestedFields: ['employment_status', 'employer_name', 'employment_duration_months', 'business_name', 'nature_of_business', 'business_duration_months'], slaDueAt: new Date(Date.now() + 48 * 3600_000) },
         });
         await this.emitMerchant(tx, locked, 'application.action_required');
       } else {

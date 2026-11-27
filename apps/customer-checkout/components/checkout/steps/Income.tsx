@@ -4,11 +4,21 @@ import { useState } from 'react';
 import { Button } from '@araf/ui';
 import { useAction, useCheckout } from '../context';
 import { ChoiceCard, ErrorNotice, StepCard, Why } from '../ui';
+import { EARNS_KEY } from './Enhanced';
 
 export function IncomeProfileStep({ onDone }: { onDone?: () => void }) {
   const { api, base, view } = useCheckout();
   const { busy, error, run } = useAction();
-  const [choice, setChoice] = useState<string>(view.income_profile ?? '');
+  // Start from the answer given earlier on the credit-review form (if any), so the customer is not asked twice.
+  const [choice, setChoice] = useState<string>(() => {
+    if (view.income_profile) return view.income_profile;
+    try {
+      const earns = sessionStorage.getItem(EARNS_KEY);
+      return earns === 'BUSINESS' ? 'BUSINESS_OWNER' : earns === 'SALARY' ? 'SALARY_EARNER' : '';
+    } catch {
+      return '';
+    }
+  });
   return (
     <StepCard
       eyebrow="Step 3 · Connect finances"

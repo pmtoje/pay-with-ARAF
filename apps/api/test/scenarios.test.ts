@@ -57,7 +57,8 @@ describe('Sandbox scenarios and security controls', () => {
   it('3. fair credit → enhanced assessment → analyst clears → checker approves → continues', async () => {
     const { c, otp, ref } = await start('22200000003', '1988-01-22');
     expect(otp.body.state).toBe('ENHANCED_REVIEW_REQUIRED');
-    const info = await c.post('/enhanced-info', { employment_status: 'EMPLOYED', employer_name: 'Lagoon Logistics', employment_duration_months: 40, job_role: 'Analyst', monthly_income_naira: 420000, residential_address: '5 Test Street, Yaba, Lagos', accommodation_type: 'RENTED', dependants: 1, existing_obligations_naira: 40000 });
+    // Only what the Bank does not already have: how the customer earns and where.
+    const info = await c.post('/enhanced-info', { employment_status: 'EMPLOYED', employer_name: 'Lagoon Logistics', employment_duration_months: 40 });
     expect(info.body.state).toBe('ENHANCED_REVIEW_PENDING');
     const queue = (await analyst.get('/api/admin/reviews?queue=FAIR_CREDIT')).body as Array<{ id: string; application_reference: string }>;
     const review = queue.find((r) => r.application_reference === ref)!;
@@ -75,7 +76,7 @@ describe('Sandbox scenarios and security controls', () => {
 
   it('4. fair credit → enhanced review declined', async () => {
     const { c, ref } = await start('22200000004', '1985-06-30');
-    await c.post('/enhanced-info', { employment_status: 'EMPLOYED', monthly_income_naira: 300000, residential_address: '9 Test Close, Ikeja', accommodation_type: 'FAMILY', dependants: 3, existing_obligations_naira: 120000 });
+    await c.post('/enhanced-info', { employment_status: 'SELF_EMPLOYED', business_name: 'Ikeja Phones Hub', nature_of_business: 'Phone retail' });
     const review = ((await analyst.get('/api/admin/reviews')).body as Array<{ id: string; application_reference: string }>).find((r) => r.application_reference === ref)!;
     await analyst.post(`/api/admin/reviews/${review.id}/decision`, { decision: 'DECLINE', reason: 'Delinquency indicators and high obligations' });
     const ap = ((await risk.get('/api/admin/approvals?status=PENDING&types=REVIEW_DECISION')).body as Array<{ id: string; resource_id: string }>).find((x) => x.resource_id === review.id)!;

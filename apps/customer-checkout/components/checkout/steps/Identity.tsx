@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Button, Checkbox, Field, Input, OtpInput, Skeleton } from '@araf/ui';
+import { ApiError, Button, Checkbox, Field, Input, OtpInput, Skeleton } from '@araf/ui';
 import { errorCode, retryAfter } from '@/lib/api';
 import type { ConsentItem, OtpSent, View } from '@/lib/types';
 import { useAction, useCheckout } from '../context';
@@ -30,6 +30,8 @@ export function IdentityStep() {
   const [showBvn, setShowBvn] = useState(false);
   const [dob, setDob] = useState('');
   const [gender, setGender] = useState<'' | 'male' | 'female'>('');
+  // Asked only when neither the BVN record nor the merchant supplied it (the server says so).
+  const [askGender, setAskGender] = useState(false);
   const [touched, setTouched] = useState(false);
   // Details the merchant already gave us are used as-is; the customer can still change them.
   const pre = summary.prefill;
@@ -67,7 +69,7 @@ export function IdentityStep() {
   const needBvn = !useBvnFromMerchant;
   const needDob = !useDobFromMerchant;
   const bvnError = touched && needBvn && !/^\d{11}$/.test(bvn) ? 'Enter the 11 digits of your BVN.' : null;
-  const needGender = !pre?.gender;
+  const needGender = askGender && !pre?.gender;
   const genderError = touched && needGender && !gender ? 'Choose the gender on your BVN record.' : null;
   const dobError = touched && needDob && (!dob || dob > todayIso()) ? 'Enter your date of birth.' : null;
 
@@ -92,6 +94,12 @@ export function IdentityStep() {
               setOtp({ to: null });
               return true;
             }
+          }
+          // Only the gender on the BVN record is missing: ask for it, keep everything else.
+          const fields = e instanceof ApiError && Array.isArray(e.details?.fields) ? (e.details!.fields as Array<{ path?: string }>) : [];
+          if (errorCode(e) === 'VALIDATION_FAILED' && fields.length > 0 && fields.every((f) => f.path === 'gender')) {
+            setAskGender(true);
+            return true;
           }
           // Details from the merchant did not match the BVN record: let the customer enter them.
           if (['IDENTITY_MISMATCH', 'INVALID_BVN', 'VALIDATION_FAILED', 'IDENTITY_NOT_FOUND'].includes(errorCode(e) ?? '')) {
@@ -197,7 +205,7 @@ export function IdentityStep() {
       title="Let’s confirm it’s you"
       description={
         summary.prefill?.bvn && summary.prefill?.date_of_birth
-          ? `${summary.partner.name} has securely sent us your details. Give your permissions below and confirm it’s you with the code we send to your email.`
+          ? `${summary.partner.name} has securely sent us your details. Give your permissions below and confirm it’s you with the code we send to the phone linked to your BVN.`
           : `To finance your ${summary.partner.name} purchase, The Alternative Bank needs to verify your identity. It takes about a minute.`
       }
     >
@@ -308,7 +316,7 @@ export function IdentityStep() {
               {genderError && <p className="text-sm text-danger">{genderError}</p>}
             </div>
           )}
-          <Why>Your BVN and date of birth let us confirm your identity with the national BVN service and send a code to the phone linked to your BVN. Your gender is needed for the credit check. We never show or share your full BVN.</Why>
+          <Why>Your BVN and date of birth let us confirm your identity with the national BVN service and send a code to the phone linked to your BVN. {needGender ? ' Your gender is needed for the credit check because your BVN record did not include it.' : ''} We never show or share your full BVN.</Why>
         </fieldset>
 
         <ErrorNotice error={error} />

@@ -287,6 +287,21 @@ Requested 2026-11-27: "Need Seedfi and Periculum to analyze the customer once an
   application instead of calling SeedFi again. It keeps its original expiry and is re-classified under the new
   application's credit policy. Within one application, revised carts already reuse statements and analysis.
 
+### D-036 — Ask only what is necessary
+Requested 2026-11-27: "if the detail isn't necessary, please don't ask for it."
+* **Gender** (needed by SeedFi) comes from the BVN record or the merchant pre-fill. The customer is asked only
+  when both are missing, and the server says so.
+* **Fair-credit / no-history review form:** cut from 12 questions to how the customer earns (salary or own
+  business), the employer or business name, and optionally what the business does and for how long.
+  - Income and existing repayments come from SeedFi and the statement analysis; the address from the merchant
+    or the BVN record.
+  - Accommodation type, number of dependants and job title were not used by any rule and are no longer asked.
+  - The answer pre-selects the later "How do you earn?" step (salary earner or business owner), so it is not
+    asked twice.
+* **Business owners** use the same checkout: 12 months of statements, all repayments ≤ 10% of average monthly
+  turnover (D-025), and Periculum's BUSINESS statement type.
+* **Credit Risk** may ask for any removed question to come back; the API still accepts the old fields.
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable
