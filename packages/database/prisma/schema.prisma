@@ -677,6 +677,7 @@ model IdentityVerification {
   dobEncrypted     String?
   firstNameEnc     String?
   lastNameEnc      String?
+  gender           String? // 'male' | 'female', as on the BVN record (SeedFi requires it)
   attempts         Int       @default(0)
   createdAt        DateTime  @default(now())
   verifiedAt       DateTime?
@@ -758,6 +759,8 @@ model CreditAssessment {
   attempt                  Int       @default(1)
   assessedAt               DateTime?
   validUntil               DateTime?
+  /// Set when a still-valid SeedFi result for the same customer was reused instead of calling SeedFi again.
+  reusedFromId             String?
   createdAt                DateTime  @default(now())
 
   @@index([applicationId])

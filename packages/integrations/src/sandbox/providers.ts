@@ -66,7 +66,7 @@ export class SandboxIdentityProvider implements IdentityVerificationProvider {
     if (id?.identityProviderDown) throw new ProviderError('IDENTITY', 'UNAVAILABLE');
     if (!id) return { status: 'NOT_FOUND' as const, providerReference: ref('IDV') };
     if (id.dateOfBirth !== dob) return { status: 'DOB_MISMATCH' as const, providerReference: ref('IDV') };
-    return { status: 'MATCH' as const, firstName: id.firstName, lastName: id.lastName, phone: id.phone, providerReference: ref('IDV') };
+    return { status: 'MATCH' as const, firstName: id.firstName, lastName: id.lastName, phone: id.phone, providerReference: ref('IDV'), gender: 'female' as const };
   }
 }
 

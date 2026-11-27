@@ -59,6 +59,22 @@ const schema = z.object({
    * merchant supplied instead of the BVN-linked phone. Never allowed for production records — the code sent
    * to the BVN-linked phone is what proves the shopper holds the BVN.
    */
+  /**
+   * SeedFi Seed Score (API v2.0). simulator = built-in sandbox simulator; connected = the real SeedFi for both
+   * environments (point SANDBOX deployments at SeedFi staging, production at loanengine.theseedfi.com).
+   */
+  SEEDFI_MODE: z.enum(['simulator', 'connected']).default('simulator'),
+  SEEDFI_BASE_URL: z.string().url().optional(),
+  SEEDFI_API_KEY: z.string().min(8).optional(),
+  SEEDFI_ASSESS_PATH: z.string().startsWith('/').default('/scoring/api/v1/seed-score/calculate'),
+  SEEDFI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
+  /** Periculum Insights statement analysis. connected = the real Periculum for both environments (PDF statements). */
+  PERICULUM_MODE: z.enum(['simulator', 'connected']).default('simulator'),
+  PERICULUM_BASE_URL: z.string().url().default('https://api.insights-periculum.io'),
+  PERICULUM_AUTH_URL: z.string().url().default('https://insightsb2b.auth-periculum.app/realms/prod/protocol/openid-connect/token'),
+  PERICULUM_CLIENT_ID: z.string().min(1).optional(),
+  PERICULUM_CLIENT_SECRET: z.string().min(1).optional(),
+  PERICULUM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(180000).default(60000),
   SANDBOX_OTP_VIA_MERCHANT_EMAIL: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 });
 
@@ -100,6 +116,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if ((c.ARAF_MODE === 'connected' || c.ARAF_SSO_ENABLED) && (!c.ARAF_BASE_URL || !c.ARAF_INTEGRATION_SECRET)) problems.push('ARAF_BASE_URL and ARAF_INTEGRATION_SECRET are required to connect to ARAF');
   if (isProd && c.ARAF_BASE_URL && !c.ARAF_BASE_URL.startsWith('https://')) problems.push('ARAF_BASE_URL must use https');
   if (isProd && c.STAFF_EMAIL_DOMAINS.split(',').some((d) => d.trim().endsWith('.example'))) problems.push('STAFF_EMAIL_DOMAINS must not include example domains in production');
+  if (c.SEEDFI_MODE === 'connected' && (!c.SEEDFI_BASE_URL || !c.SEEDFI_API_KEY)) problems.push('SEEDFI_BASE_URL and SEEDFI_API_KEY are required when SEEDFI_MODE=connected');
+  if (c.PERICULUM_MODE === 'connected' && (!c.PERICULUM_CLIENT_ID || !c.PERICULUM_CLIENT_SECRET)) problems.push('PERICULUM_CLIENT_ID and PERICULUM_CLIENT_SECRET are required when PERICULUM_MODE=connected');
+  if (isProd && c.SEEDFI_BASE_URL && !c.SEEDFI_BASE_URL.startsWith('https://')) problems.push('SEEDFI_BASE_URL must use https');
   if (c.SANDBOX_OTP_VIA_MERCHANT_EMAIL && (isProd || c.PLATFORM_ENVIRONMENT === 'PRODUCTION')) problems.push('SANDBOX_OTP_VIA_MERCHANT_EMAIL is sandbox-only');
   if (problems.length) throw new Error(`Unsafe configuration refused: ${problems.join('; ')}`);
   const isSandbox = c.PLATFORM_ENVIRONMENT === 'SANDBOX';

@@ -37,6 +37,8 @@ BVN-linked phone. That code is what proves the shopper holds the BVN.
 - Confirmation that the same Seed Score endpoint and response fields apply.
 - SeedFi's go-live sign-off steps.
 
+**Built:** the live adapter (`SEEDFI_MODE=connected`) is ready; it only needs the API key (staging first).
+
 ## 3. Periculum statement analysis (Technology / Credit Risk)
 **Why:** the mandatory income and affordability analysis (6 months for salary earners, 12 months for
 business owners).
@@ -49,6 +51,11 @@ business owners).
   Insights dashboard).
 - The webhook secret.
 - Confirmation that the same statement-upload and analysis endpoints apply.
+- The request body format of `POST /statements/analytics` (format `periculum`), so AltBank statements can be
+  sent as transactions. Until then they must be PDFs.
+- Confirmation that amounts in responses are in naira, and the scale of `confidenceOnParsing`.
+
+**Built:** the live adapter (`PERICULUM_MODE=connected`) is ready; it only needs the credentials.
 
 **We provide:** webhook URL `https://api.<pwa-domain>/api/webhooks/periculum` (path to be confirmed when
 the adapter is built).

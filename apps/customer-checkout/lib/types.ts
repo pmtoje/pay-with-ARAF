@@ -21,7 +21,7 @@ export interface Summary {
   /** Merchant websites approved to embed this checkout. */
   embed_origins?: string[];
   /** Which details the merchant already provided (values stay on the server). */
-  prefill?: { from: string; bvn: boolean; bvn_hint: string | null; date_of_birth: boolean; name: boolean; email: boolean; phone: boolean; address: boolean };
+  prefill?: { from: string; bvn: boolean; bvn_hint: string | null; date_of_birth: boolean; gender?: boolean; name: boolean; email: boolean; phone: boolean; address: boolean };
   expires_at: string;
   expired: boolean;
   superseded_by: string | null;

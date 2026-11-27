@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — 2026-11-27
+### Added
+- Live SeedFi Seed Score adapter (API v2.0) and live Periculum Insights adapter (PDF), switched on by
+  `SEEDFI_MODE` / `PERICULUM_MODE` (D-035).
+- Reuse of a still-valid SeedFi result across a customer's applications.
+- Gender (as on the BVN record) at the identity step, including merchant pre-fill. Migration
+  `20261127120000_seedfi_live`.
+- Tests: adapters against the documented formats; reuse across applications.
+
 ## 0.5.0 — 2026-11-26
 ### Added
 - Connection to the real ARAF (D-034), keeping the repositories separate:

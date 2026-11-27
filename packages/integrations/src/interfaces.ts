@@ -39,7 +39,7 @@ export interface CallContext {
 // ---- Identity ------------------------------------------------------------------------
 
 export type BvnLookupResult =
-  | { status: 'MATCH'; firstName: string; lastName: string; phone: string; providerReference: string }
+  | { status: 'MATCH'; firstName: string; lastName: string; phone: string; providerReference: string; gender?: 'male' | 'female' }
   | { status: 'DOB_MISMATCH'; providerReference: string }
   | { status: 'NOT_FOUND'; providerReference: string };
 
@@ -62,7 +62,22 @@ export interface CreditAssessmentResponse {
 
 export interface CreditAssessmentProvider {
   readonly name: string;
-  assess(input: { bvn: string; firstName: string; lastName: string; dateOfBirth: string }, ctx: CallContext): Promise<CreditAssessmentResponse>;
+  assess(
+    input: {
+      bvn: string;
+      firstName: string;
+      lastName: string;
+      dateOfBirth: string;
+      /** BVN-linked phone, E.164 (SeedFi requires it). */
+      phone?: string;
+      /** As on the BVN record (SeedFi requires it). */
+      gender?: 'male' | 'female';
+      /** Stable, non-identifying customer id for the provider (never the BVN). */
+      customerId?: string;
+      tenorMonths?: number;
+    },
+    ctx: CallContext,
+  ): Promise<CreditAssessmentResponse>;
 }
 
 // ---- Bank accounts & core banking (AltBank internal) ---------------------------------

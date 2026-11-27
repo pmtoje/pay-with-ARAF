@@ -62,6 +62,7 @@ export interface MerchantPrefill {
   last_name?: string;
   date_of_birth?: string;
   bvn?: string;
+  gender?: 'male' | 'female';
   address?: { line1: string; city: string; state: string };
 }
 
@@ -151,6 +152,7 @@ export class JourneyService {
         bvn: !!pre.bvn,
         bvn_hint: pre.bvn ? `•••••••••${pre.bvn.slice(-2)}` : null,
         date_of_birth: !!pre.date_of_birth,
+        gender: !!pre.gender,
         name: !!(pre.first_name && pre.last_name),
         email: !!pre.email,
         phone: !!pre.phone,
@@ -229,7 +231,7 @@ export class JourneyService {
   // ---- Identity verification ------------------------------------------------------------
 
   async submitIdentity(applicationId: string, body: unknown, req: AuthedRequest) {
-    const given = z.object({ bvn: z.string().optional(), date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict().parse(body);
+    const given = z.object({ bvn: z.string().optional(), date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), gender: z.enum(['male', 'female']).optional() }).strict().parse(body);
     const app = await this.prisma.financingApplication.findUniqueOrThrow({ where: { id: applicationId } });
     // Use what the merchant already provided; the customer only supplies what is missing (or overrides it).
     const pre = await this.prefillFor(app.checkoutSessionId);
@@ -266,6 +268,10 @@ export class JourneyService {
       await this.audit.record(req.actor, { action: 'customer.identity_failed', resourceType: 'APPLICATION', resourceId: applicationId, outcome: 'FAILURE', reason: lookup.status });
       throw new AppError('IDENTITY_MISMATCH');
     }
+    // The credit check (SeedFi) needs the gender on the BVN record: the BVN service's value when it returns one,
+    // otherwise what the customer (or the merchant) gave.
+    const gender = lookup.gender ?? given.gender ?? pre.gender ?? null;
+    if (!gender) fail('VALIDATION_FAILED', { fields: [{ path: 'gender', message: 'Choose the gender on your BVN record' }] });
     if (!ageOk) {
       await this.prisma.$transaction(async (tx) => {
         const locked = await this.ctx.lockApplication(tx, applicationId);
@@ -287,6 +293,7 @@ export class JourneyService {
         dobEncrypted: this.crypto.encrypt(input.date_of_birth, `idv:${applicationId}`),
         firstNameEnc: this.crypto.encrypt(lookup.firstName, `idv:${applicationId}`),
         lastNameEnc: this.crypto.encrypt(lookup.lastName, `idv:${applicationId}`),
+        gender,
       },
     });
     const sent = await this.issueOtp(app, 'IDENTITY', lookup.phone, req, verification.id);
@@ -443,14 +450,42 @@ export class JourneyService {
     const bvn = await this.customerBvn(app.customerId!);
     const customer = await this.prisma.customer.findUniqueOrThrow({ where: { id: app.customerId! } });
     const attempt = (await this.prisma.creditAssessment.count({ where: { applicationId } })) + 1;
+    // Once and for all: a customer's still-valid SeedFi result (from any earlier application, same environment)
+    // is reused instead of calling SeedFi again. It keeps its ORIGINAL expiry and is re-classified under this
+    // application's credit policy.
+    const sameEnvApps = (await this.prisma.financingApplication.findMany({ where: { customerId: customer.id, environment: app.environment, id: { not: applicationId } }, select: { id: true } })).map((a) => a.id);
+    const reusable = sameEnvApps.length
+      ? await this.prisma.creditAssessment.findFirst({
+          where: { customerId: customer.id, provider: 'SEEDFI', status: 'COMPLETED', validUntil: { gt: new Date() }, applicationId: { in: sameEnvApps } },
+          orderBy: { assessedAt: 'desc' },
+        })
+      : null;
     let response;
     try {
-      response = await this.providers.call(app.environment, 'SEEDFI', 'credit_assessment', this.callCtx(app, req), () =>
-        this.providers.for(app.environment).credit.assess(
-          { bvn, firstName: customer.firstName, lastName: customer.lastName, dateOfBirth: this.crypto.decrypt(verification.dobEncrypted!, `idv:${applicationId}`) },
-          this.callCtx(app, req),
-        ),
-      );
+      response = reusable
+        ? {
+            providerReference: reusable.providerReference ?? 'reused',
+            score: reusable.band === 'NO_SCORE' ? null : reusable.score,
+            hasCreditHistory: reusable.band !== 'NO_SCORE',
+            bureauMonthlyObligations: reusable.bureauMonthlyObligationsKobo,
+            outstandingExposure: reusable.outstandingExposureKobo,
+            delinquencyIndicators: reusable.delinquencyIndicators,
+          }
+        : await this.providers.call(app.environment, 'SEEDFI', 'credit_assessment', this.callCtx(app, req), () =>
+            this.providers.for(app.environment).credit.assess(
+              {
+                bvn,
+                firstName: customer.firstName,
+                lastName: customer.lastName,
+                dateOfBirth: this.crypto.decrypt(verification.dobEncrypted!, `idv:${applicationId}`),
+                phone: verification.phoneEncrypted ? this.crypto.decrypt(verification.phoneEncrypted, `idv:${applicationId}`) : undefined,
+                gender: verification.gender === 'male' || verification.gender === 'female' ? verification.gender : undefined,
+                // Stable and non-identifying (never the BVN).
+                customerId: `pwa-${customer.id}`,
+              },
+              this.callCtx(app, req),
+            ),
+          );
     } catch (e) {
       // A technical failure is NEVER interpreted as poor credit.
       await this.prisma.creditAssessment.create({
@@ -484,11 +519,13 @@ export class JourneyService {
           outstandingExposureKobo: response.outstandingExposure,
           delinquencyIndicators: response.delinquencyIndicators,
           attempt,
-          assessedAt: new Date(),
-          validUntil: new Date(Date.now() + policy.assessmentValidityDays * 86_400_000),
+          assessedAt: reusable?.assessedAt ?? new Date(),
+          validUntil: reusable?.validUntil ?? new Date(Date.now() + policy.assessmentValidityDays * 86_400_000),
+          reusedFromId: reusable?.id ?? null,
         },
       });
       await this.state.transitionApplication(tx, locked, 'CREDIT_CHECK_COMPLETED', SYSTEM_ACTOR, { metadata: { band } });
+      if (reusable) await this.audit.record(SYSTEM_ACTOR, { action: 'credit.assessment_reused', resourceType: 'APPLICATION', resourceId: applicationId, after: { reusedFrom: reusable.id, validUntil: reusable.validUntil } }, tx);
       if (outcome === 'DECLINE') {
         await this.state.transitionApplication(tx, locked, 'DECLINED', SYSTEM_ACTOR, { reason: 'CREDIT_POLICY', data: { declineReasonCode: 'CREDIT_POLICY' } });
         await this.emitMerchant(tx, locked, 'application.declined');

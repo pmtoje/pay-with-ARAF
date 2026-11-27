@@ -29,6 +29,7 @@ export function IdentityStep() {
   const [bvn, setBvn] = useState('');
   const [showBvn, setShowBvn] = useState(false);
   const [dob, setDob] = useState('');
+  const [gender, setGender] = useState<'' | 'male' | 'female'>('');
   const [touched, setTouched] = useState(false);
   // Details the merchant already gave us are used as-is; the customer can still change them.
   const pre = summary.prefill;
@@ -66,6 +67,8 @@ export function IdentityStep() {
   const needBvn = !useBvnFromMerchant;
   const needDob = !useDobFromMerchant;
   const bvnError = touched && needBvn && !/^\d{11}$/.test(bvn) ? 'Enter the 11 digits of your BVN.' : null;
+  const needGender = !pre?.gender;
+  const genderError = touched && needGender && !gender ? 'Choose the gender on your BVN record.' : null;
   const dobError = touched && needDob && (!dob || dob > todayIso()) ? 'Enter your date of birth.' : null;
 
   const sendIdentity = () =>
@@ -73,7 +76,7 @@ export function IdentityStep() {
       'identity',
       async () => {
         // Only send what the customer typed; anything the merchant provided is used server-side.
-        const res = await api.post<OtpSent>(`${base}/identity`, { ...(needBvn ? { bvn } : {}), ...(needDob ? { date_of_birth: dob } : {}) });
+        const res = await api.post<OtpSent>(`${base}/identity`, { ...(needBvn ? { bvn } : {}), ...(needDob ? { date_of_birth: dob } : {}), ...(needGender ? { gender } : {}) });
         setOtp({ to: res.otp_sent_to });
         setCode('');
         setCooldown(res.resend_available_in_seconds ?? 60);
@@ -106,7 +109,7 @@ export function IdentityStep() {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (missingConsent || (needBvn && !/^\d{11}$/.test(bvn)) || (needDob && (!dob || dob > todayIso()))) return;
+    if (missingConsent || (needBvn && !/^\d{11}$/.test(bvn)) || (needDob && (!dob || dob > todayIso())) || (needGender && !gender)) return;
     void run('identity', async () => {
       const consents = (catalogue ?? []).filter((c) => checked[c.type]).map((c) => c.type);
       await api.post(`${base}/consents`, { consents });
@@ -289,7 +292,23 @@ export function IdentityStep() {
             {({ id, describedBy, invalid }) => <Input id={id} aria-describedby={describedBy} aria-invalid={invalid} type="date" max={todayIso()} min="1900-01-01" value={dob} onChange={(e) => setDob(e.target.value)} />}
           </Field>
           )}
-          <Why>Your BVN and date of birth let us confirm your identity with the national BVN service and send a code to the email you gave the merchant. We never show or share your full BVN.</Why>
+          {needGender && (
+            <div role="radiogroup" aria-label="Gender as on your BVN record" className="space-y-2">
+              <p className="text-sm font-medium text-fg">
+                Gender <span className="text-muted">(as on your BVN record)</span>
+              </p>
+              <div className="flex gap-3">
+                {(['female', 'male'] as const).map((g) => (
+                  <label key={g} className={`flex h-11 flex-1 cursor-pointer items-center justify-center rounded-md border text-sm font-medium ${gender === g ? 'border-gold bg-gold-soft/40 text-fg' : 'border-border-strong text-muted'}`}>
+                    <input type="radio" name="gender" value={g} checked={gender === g} onChange={() => setGender(g)} className="sr-only" />
+                    {g === 'female' ? 'Female' : 'Male'}
+                  </label>
+                ))}
+              </div>
+              {genderError && <p className="text-sm text-danger">{genderError}</p>}
+            </div>
+          )}
+          <Why>Your BVN and date of birth let us confirm your identity with the national BVN service and send a code to the phone linked to your BVN. Your gender is needed for the credit check. We never show or share your full BVN.</Why>
         </fieldset>
 
         <ErrorNotice error={error} />

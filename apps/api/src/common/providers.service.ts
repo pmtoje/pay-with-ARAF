@@ -1,6 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   ArafHttpProvider,
+  PericulumHttpProvider,
+  SeedfiHttpProvider,
   EmailRoutingNotificationProvider,
   EncryptedFileStorage,
   IntegrationNotConfiguredError,
@@ -96,6 +98,8 @@ export class ProvidersService {
   readonly sandbox: SandboxProviderSet;
   private readonly live: ProviderSet;
   private connectedAraf: ArafHttpProvider | null = null;
+  /** Real providers that replace a simulator in BOTH environments (each switched on by its *_MODE=connected). */
+  private connected: Partial<ProviderSet> = {};
   readonly storage: EncryptedFileStorage;
 
   constructor(
@@ -141,6 +145,26 @@ export class ProvidersService {
     // Connected to the real AltBank Retail Asset Factory: both environments use it instead of the simulator.
     if (config.ARAF_MODE === 'connected' && config.ARAF_BASE_URL && config.ARAF_INTEGRATION_SECRET) {
       this.connectedAraf = new ArafHttpProvider({ baseUrl: config.ARAF_BASE_URL, secret: config.ARAF_INTEGRATION_SECRET });
+      this.connected.araf = this.connectedAraf;
+    }
+    if (config.SEEDFI_MODE === 'connected' && config.SEEDFI_BASE_URL && config.SEEDFI_API_KEY) {
+      this.connected.credit = new SeedfiHttpProvider({
+        baseUrl: config.SEEDFI_BASE_URL,
+        apiKey: config.SEEDFI_API_KEY,
+        assessPath: config.SEEDFI_ASSESS_PATH,
+        timeoutMs: config.SEEDFI_TIMEOUT_MS,
+        // Production records never accept SeedFi staging (dummy) responses.
+        rejectDummyData: config.PLATFORM_ENVIRONMENT === 'PRODUCTION',
+      });
+    }
+    if (config.PERICULUM_MODE === 'connected' && config.PERICULUM_CLIENT_ID && config.PERICULUM_CLIENT_SECRET) {
+      this.connected.periculum = new PericulumHttpProvider({
+        baseUrl: config.PERICULUM_BASE_URL,
+        authUrl: config.PERICULUM_AUTH_URL,
+        clientId: config.PERICULUM_CLIENT_ID,
+        clientSecret: config.PERICULUM_CLIENT_SECRET,
+        timeoutMs: config.PERICULUM_TIMEOUT_MS,
+      });
     }
     this.storage = new EncryptedFileStorage(config.STORAGE_DIR, crypto.encryptor);
   }
@@ -153,10 +177,15 @@ export class ProvidersService {
   for(environment: Environment): ProviderSet {
     if (environment === 'SANDBOX') {
       if (!this.config.isSandbox) throw new IntegrationNotConfiguredError('Sandbox simulators are disabled in this deployment');
-      return this.connectedAraf ? { ...this.sandbox, araf: this.connectedAraf } : this.sandbox;
+      return { ...this.sandbox, ...this.connected };
     }
     if (!this.config.LIVE_OPERATIONS_ENABLED) throw new IntegrationNotConfiguredError('Live operations');
-    return this.connectedAraf ? { ...this.live, araf: this.connectedAraf } : this.live;
+    return { ...this.live, ...this.connected };
+  }
+
+  /** Whether a provider (by its call name) is served by a real, connected adapter. */
+  private isConnected(provider: string): boolean {
+    return (provider === 'ARAF' && !!this.connected.araf) || (provider === 'SEEDFI' && !!this.connected.credit) || (provider === 'PERICULUM' && !!this.connected.periculum);
   }
 
   isSimulated(environment: Environment): boolean {
@@ -188,7 +217,7 @@ export class ProvidersService {
       const latencyMs = Date.now() - started;
       this.prisma.integrationLog
         .create({
-          data: { provider, operation, environment, isSimulated: environment === 'SANDBOX' && !(provider === 'ARAF' && this.connectedAraf), applicationId: ctx.applicationId, correlationId: ctx.correlationId, outcome, errorCode, latencyMs },
+          data: { provider, operation, environment, isSimulated: environment === 'SANDBOX' && !this.isConnected(provider), applicationId: ctx.applicationId, correlationId: ctx.correlationId, outcome, errorCode, latencyMs },
         })
         .catch((err) => this.logger.warn(`integration log failed: ${(err as Error).message}`));
     }

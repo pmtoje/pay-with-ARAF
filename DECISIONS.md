@@ -265,6 +265,28 @@ own application and database. The two are joined by a signed HTTP contract (v1, 
 **Open:** ARAF's production host and which branch deploys it; whether password + TOTP sign-in
 should be switched off for Bank staff once single sign-on is live; secret rotation procedure.
 
+### D-035 — Live SeedFi and Periculum; each customer is analysed once while the result is valid
+Requested 2026-11-27: "Need Seedfi and Periculum to analyze the customer once and for all."
+* **SeedFi** (`SEEDFI_MODE=connected`) follows SeedFi API v2.0 — the contract the Bank's ARAF already uses.
+  - The decision uses the reviewed Seed Score, rounded **down** to a whole number.
+  - "No credit history" means no score, so the thin-file policy applies.
+  - Production refuses SeedFi test (dummy) responses. Any unexpected answer is a technical failure, never a pass.
+  - SeedFi requires the BVN-linked phone and the gender on the BVN record. Gender is taken from the BVN service
+    when it returns one, otherwise from the merchant pre-fill, otherwise asked at the identity step.
+* **Periculum** (`PERICULUM_MODE=connected`) follows Periculum's published API: PDF statement upload, then the
+  documented analytics and transactions.
+  - **Salary:** the credits Periculum lists in `incomeAnalysis.salaryTransactions` (matched by date and amount).
+    The Bank's salary rules then apply.
+  - **Existing obligations:** `behavioralAnalysis.averageMonthlyLoanRepaymentAmount`.
+  - **Reliability:** a statement counts as reliable only when Periculum reports a parsing confidence ≥ 90%.
+    Otherwise a missing salary month goes to review, never to an automatic decline.
+  - **PDF only for now:** AltBank and Mono statements (transaction lists) are refused until Periculum confirms its
+    JSON analytics format. **Open:** confirm that format, or have core banking supply official PDF statements.
+  - **Assumption to confirm:** amounts in Periculum responses are naira.
+* **Once and for all:** a customer's still-valid SeedFi result (same environment) is reused by their next
+  application instead of calling SeedFi again. It keeps its original expiry and is re-classified under the new
+  application's credit policy. Within one application, revised carts already reuse statements and analysis.
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable

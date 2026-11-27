@@ -33,6 +33,8 @@ export const createCheckoutSessionSchema = z
         last_name: z.string().trim().min(1).max(80).optional(),
         date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         bvn: z.string().regex(/^\d{11}$/).optional(),
+        /** As on the BVN record; used for the credit check when the BVN service does not return it. */
+        gender: z.enum(['male', 'female']).optional(),
         address: z
           .object({ line1: z.string().trim().min(1).max(200), city: z.string().trim().min(1).max(80), state: z.string().trim().min(1).max(80) })
           .strict()
