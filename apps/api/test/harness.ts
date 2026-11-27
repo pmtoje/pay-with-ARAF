@@ -48,7 +48,10 @@ export class WebhookReceiver {
         res.end('ok');
       });
     });
-    await new Promise<void>((r) => this.server.listen(0, '127.0.0.1', () => r()));
+    // Bind the unspecified IPv6 address (dual-stack) so both 127.0.0.1 and ::1 reach the
+    // receiver. CI resolves `localhost` to ::1 first, which previously failed when this
+    // server listened on 127.0.0.1 only.
+    await new Promise<void>((r) => this.server.listen(0, () => r()));
   }
   get url() {
     return `http://127.0.0.1:${(this.server.address() as AddressInfo).port}/webhooks/araf`;
