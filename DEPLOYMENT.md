@@ -70,6 +70,26 @@ In non-local environments run the worker as its own process: `node apps/api/dist
 Images: `infrastructure/docker/api.Dockerfile` (API/worker, non-root, tini, health check) and
 `infrastructure/docker/web.Dockerfile` (`--build-arg APP=<app>`).
 
+## Render (native Node, no Docker)
+Deploy from the same repository (root directory = repo root) as two services. Both use the shared
+pnpm workspace; there is no per-app repository.
+
+Build command (API and worker):
+```bash
+corepack enable && pnpm install --frozen-lockfile \
+  && pnpm --filter "./packages/*" build \
+  && pnpm --filter @araf/api build
+```
+Start commands:
+* API web service: `node apps/api/dist/main.js` (health check `/health/live`)
+* Worker background service: `node apps/api/dist/worker.js`
+
+Set `NODE_VERSION=22`. The API honours `PORT` automatically (it falls back to `API_PORT`, then 4000),
+so leave `API_PORT` unset unless you need to override the host. Attach a persistent disk to the API
+at `/data` and set `STORAGE_DIR=/data/storage`; the worker does not need it. Apply future migrations
+with a pre-deploy command (`pnpm --filter @araf/database migrate:deploy`) or from CI/local against
+the direct/session pooler URL. The worker must run as its own service in every non-local environment.
+
 ## Configuration
 See `.env.example`. Secrets (`ENCRYPTION_KEYS`, `BLIND_INDEX_KEY`, `API_KEY_PEPPER`, `OTP_PEPPER`,
 `STATE_TOKEN_KEY`, `INTERNAL_CALLBACK_SECRET`) must come from the Bank's secrets manager/KMS
@@ -95,6 +115,16 @@ role once, as `postgres`, from the Supabase SQL editor:
 The demo store fails closed if it connects while `ALTMALL_DB_SCHEMA` is set but the active schema
 differs, so a missing grant cannot silently create tables in `public`. Local Docker continues to use
 a separate `altmall` database (`infrastructure/docker/init-altmall.sql`).
+
+Connection notes for Supabase:
+* The direct host `db.<project-ref>.supabase.co` is IPv6-only on new projects. From an IPv4-only
+  machine or service, run migrations through the **session pooler** on port 5432 instead.
+* Prisma (API/worker): `postgresql://postgres.<project-ref>:<password>@<region>.pooler.supabase.com:5432/postgres?sslmode=require`.
+  On serverless hosts use the transaction pooler on 6543 with `?pgbouncer=true&connection_limit=1`.
+* AltMall uses `pg`, not Prisma. Its URL needs `?uselibpqcompat=true&sslmode=require` — `pg` 8
+  treats a plain `sslmode=require` as `verify-full` and rejects Supabase's certificate chain.
+* URL-encode reserved characters in the password (for example `$` → `%24`). The pooler user is
+  `postgres.<project-ref>` / `altmall_app.<project-ref>`, never plain `postgres`.
 
 ## Release & approval gates
 * CI (`.github/workflows/ci.yml`) must pass: secret scan, unit + integration + end-to-end tests,

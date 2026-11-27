@@ -9,7 +9,9 @@ const schema = z.object({
   PLATFORM_ENVIRONMENT: z.enum(['SANDBOX', 'PRODUCTION']),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
-  API_PORT: z.coerce.number().int().default(4000),
+  /** API listen port. Defaults to PORT (Render/Heroku-style hosts), then 4000. */
+  API_PORT: z.coerce.number().int().optional(),
+  PORT: z.coerce.number().int().optional(),
   PUBLIC_API_URL: z.string().url(),
   CHECKOUT_BASE_URL: z.string().url(),
   PARTNER_PORTAL_URL: z.string().url(),
@@ -51,6 +53,7 @@ const schema = z.object({
 });
 
 export type AppConfig = z.infer<typeof schema> & {
+  API_PORT: number;
   isSandbox: boolean;
   sandboxToolsEnabled: boolean;
   staffEmailDomains: string[];
@@ -67,6 +70,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error(`Invalid configuration: ${fields}`);
   }
   const c = parsed.data;
+  const apiPort = c.API_PORT ?? c.PORT ?? 4000;
   const isProd = c.APP_ENV === 'production';
   const problems: string[] = [];
   if (isProd) {
@@ -86,7 +90,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (isProd && c.STAFF_EMAIL_DOMAINS.split(',').some((d) => d.trim().endsWith('.example'))) problems.push('STAFF_EMAIL_DOMAINS must not include example domains in production');
   if (problems.length) throw new Error(`Unsafe configuration refused: ${problems.join('; ')}`);
   const isSandbox = c.PLATFORM_ENVIRONMENT === 'SANDBOX';
-  return { ...c, isSandbox, sandboxToolsEnabled: isSandbox && !isProd, staffEmailDomains: c.STAFF_EMAIL_DOMAINS.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean) };
+  return { ...c, API_PORT: apiPort, isSandbox, sandboxToolsEnabled: isSandbox && !isProd, staffEmailDomains: c.STAFF_EMAIL_DOMAINS.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean) };
 }
 
 export const CONFIG = Symbol('CONFIG');
