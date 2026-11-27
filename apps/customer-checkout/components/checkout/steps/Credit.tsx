@@ -23,7 +23,7 @@ export function CreditCheckStep() {
       {busy === 'retry' ? (
         <ProgressPanel title="Checking eligibility" description="This usually takes a few seconds." lines={2} />
       ) : (
-        <Why>The check uses the credit report you authorised. If it keeps failing, wait a minute and try again — your progress is saved.</Why>
+        <Why>If the check keeps failing, wait a minute and try again — your progress is saved.</Why>
       )}
       <ErrorNotice error={error} />
     </StepCard>

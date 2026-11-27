@@ -130,7 +130,7 @@ export function milestones(v: View): Milestone[] {
   };
   const list: Array<Omit<Milestone, 'state'> & { done: boolean; attention?: boolean }> = [
     { id: 'submitted', title: 'Application submitted', description: 'Received by The Alternative Bank for review.', done: done.submitted },
-    { id: 'review', title: 'Under review', description: s === 'ADDITIONAL_INFORMATION_REQUIRED' ? 'Our team needs more information from you.' : 'A Bank officer is reviewing your application.', done: done.review && done.approved, attention: s === 'ADDITIONAL_INFORMATION_REQUIRED' },
+    { id: 'review', title: 'Under review', description: s === 'ADDITIONAL_INFORMATION_REQUIRED' ? 'We need a little more information from you.' : 'We’re checking your application.', done: done.review && done.approved, attention: s === 'ADDITIONAL_INFORMATION_REQUIRED' },
     { id: 'approved', title: 'Financing approved', description: 'Final approval from the Bank.', done: done.approved },
     { id: 'documents', title: 'Documents signed', description: 'Promise to purchase and offer letter, signed with a one-time code.', done: done.documents, attention: s === 'DOCUMENTATION_PENDING' },
     { id: 'mandate', title: 'Repayment mandate active', description: 'Direct debit authorised for your repayments.', done: done.mandate, attention: s === 'MANDATE_PENDING' },

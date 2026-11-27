@@ -36,24 +36,14 @@ export function AnalysisStep() {
 }
 
 export function AffordabilityReviewStep() {
-  const { view, summary } = useCheckout();
-  const window = view.contact_window_hours;
+  const { summary } = useCheckout();
   return (
-    <StepCard eyebrow="Step 3 · Connect finances" title="Additional assessment required" description="Your application needs a closer look by our team before we can make an offer. This is a normal part of our process and is not a decline.">
+    <StepCard eyebrow="Step 3 · Connect finances" title="We’re checking your application" description="This can take a little longer for some applications. It is not a decline.">
       <ul className="space-y-3 text-sm text-muted">
-        {window ? (
-          <li className="flex gap-3">
-            <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-gold-strong" />
-            <span>
-              Because you’re a business owner, a member of our team will review your statements. We aim to contact you within {window.min}–{window.max} hours — this is a target, not a guarantee.
-            </span>
-          </li>
-        ) : (
-          <li className="flex gap-3">
-            <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-gold-strong" />
-            <span>A credit officer will review your statement. We will notify you when there is an update.</span>
-          </li>
-        )}
+        <li className="flex gap-3">
+          <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-gold-strong" />
+          <span>We’ll let you know as soon as there’s an update.</span>
+        </li>
         <li className="flex gap-3">
           <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-gold-strong" />
           <span>Your progress is saved. You can close this page and return later with the checkout link from {summary.partner.name}.</span>

@@ -36,7 +36,7 @@ export function deriveCustomerStatus(state: ApplicationState): CustomerStatus {
     case 'ENHANCED_REVIEW_REQUIRED':
       return C('CONFIRM_ELIGIBILITY', 'More information needed', 'Tell us a little more so we can assess your eligibility.', 'action');
     case 'ENHANCED_REVIEW_PENDING':
-      return C('CONFIRM_ELIGIBILITY', 'Under review', 'A credit officer is reviewing your information. We will notify you.', 'progress');
+      return C('CONFIRM_ELIGIBILITY', 'Under review', 'We’re checking your application. We’ll let you know as soon as there’s an update.', 'progress');
     case 'ENHANCED_REVIEW_CLEARED':
     case 'ACCOUNT_VERIFICATION_PENDING':
       return C('CONFIRM_ELIGIBILITY', 'Confirm your account', 'Select or open an Alternative Bank account for repayments.', 'action');
@@ -51,7 +51,7 @@ export function deriveCustomerStatus(state: ApplicationState): CustomerStatus {
     case 'STATEMENT_ANALYSIS_COMPLETED':
       return C('CONNECT_FINANCES', 'Analysing your statement', 'This usually takes a moment.', 'progress');
     case 'AFFORDABILITY_REVIEW_REQUIRED':
-      return C('CONNECT_FINANCES', 'Additional assessment required', 'Your application needs additional assessment by our team.', 'progress');
+      return C('CONNECT_FINANCES', 'Additional assessment required', 'We’re checking your application. We’ll let you know as soon as there’s an update.', 'progress');
     case 'ELIGIBLE':
     case 'OFFER_PRESENTED':
       return C('REVIEW_OFFER', 'Review your financing offer', 'This is an indicative offer. Final approval follows our review.', 'action');
@@ -62,7 +62,7 @@ export function deriveCustomerStatus(state: ApplicationState): CustomerStatus {
     case 'ARAF_UNDER_REVIEW':
       return C('TRACK', 'Application under review', 'Your application has been received and is being reviewed. It is not yet approved.', 'progress');
     case 'ADDITIONAL_INFORMATION_REQUIRED':
-      return C('TRACK', 'Additional information required', 'Our team needs more information to continue your review.', 'action');
+      return C('TRACK', 'Additional information required', 'We need a little more information to finish checking your application.', 'action');
     case 'FINANCING_APPROVED':
     case 'DOCUMENTATION_PENDING':
       return C('TRACK', 'Financing approved — documents required', 'Review and sign your financing documents.', 'action');

@@ -222,7 +222,7 @@ export function StatementsStep() {
         </div>
       )}
 
-      <Why>We use statements only to assess affordability for this application. Analysis is performed for The Alternative Bank by Periculum, under your consent. We will never ask for your internet-banking password or PIN.</Why>
+      <Why>We use your statements only to check this application. We will never ask for your internet-banking password or PIN.</Why>
     </StepCard>
   );
 }

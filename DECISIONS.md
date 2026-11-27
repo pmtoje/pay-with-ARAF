@@ -301,6 +301,10 @@ Requested 2026-11-27: "if the detail isn't necessary, please don't ask for it."
 * **Business owners** use the same checkout: 12 months of statements, all repayments ≤ 10% of average monthly
   turnover (D-025), and Periculum's BUSINESS statement type.
 * **Credit Risk** may ask for any removed question to come back; the API still accepts the old fields.
+* **Customer wording never describes the Bank's internal process** (credit officers, manual review, credit
+  reports, analysts): the customer sees that the application is being checked. Exception: the consent texts
+  still name SeedFi and Periculum, because data-protection rules require third-party processors to be disclosed
+  before consent.
 
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment

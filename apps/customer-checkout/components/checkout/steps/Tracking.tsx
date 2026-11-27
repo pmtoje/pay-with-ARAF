@@ -277,15 +277,15 @@ function InformationRequest({ question }: { question: string | null }) {
   const [sent, setSent] = useState(false);
   const tooShort = note.trim().length < 3;
   return (
-    <ActionBox title="Our team needs more information">
+    <ActionBox title="We need a little more information">
       {question ? (
         <div className="rounded-md border border-border bg-surface px-3 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted">The Bank asks</p>
           <p className="mt-1 text-sm text-fg">{question}</p>
         </div>
       ) : null}
-      <p className="text-sm text-muted">{question ? 'Reply below' : 'Please answer the question you received from our team, or share any details that help us complete your review'}. Don’t include passwords, PINs or full card numbers.</p>
-      {sent && <Alert tone="success">Thank you — we’ve sent your information to our team.</Alert>}
+      <p className="text-sm text-muted">{question ? 'Reply below' : 'Please share any details that help us finish checking your application'}. Don’t include passwords, PINs or full card numbers.</p>
+      {sent && <Alert tone="success">Thank you — we’ve received your information.</Alert>}
       <Field label="Your response" hint="Up to 1,000 characters.">
         {({ id, describedBy }) => <Textarea id={id} aria-describedby={describedBy} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} />}
       </Field>

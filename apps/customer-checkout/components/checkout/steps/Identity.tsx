@@ -11,7 +11,7 @@ import { ErrorNotice, ResendButton, SecurityNote, StepCard, Why, useCountdown } 
 const SHOWN = ['IDENTITY_VERIFICATION', 'CREDIT_ASSESSMENT', 'APPLICATION_PROCESSING', 'MARKETING'];
 const WHY: Record<string, string> = {
   IDENTITY_VERIFICATION: 'Confirms you are who you say you are and protects you from impersonation.',
-  CREDIT_ASSESSMENT: 'A preliminary check of your credit report helps us decide whether financing is suitable for you. Your score is never shared with the merchant.',
+  CREDIT_ASSESSMENT: 'This helps us decide whether financing is suitable for you. It is never shared with the merchant.',
   APPLICATION_PROCESSING: 'We need to process your details to evaluate this application.',
   MARKETING: 'Entirely optional. It does not affect your application.',
 };

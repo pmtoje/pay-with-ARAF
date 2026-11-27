@@ -14,9 +14,9 @@ const toInt = (v: string) => (v === '' ? undefined : Number(digits(v)));
 export const EARNS_KEY = 'araf-earns';
 
 /**
- * Fair credit or no credit history: a credit officer reviews the application. We ask only what the Bank does not
- * already have — income, existing repayments and the address come from SeedFi, the statement analysis, the merchant
- * and the BVN record.
+ * Fair credit or no credit history: the application gets a closer check. We ask only what the Bank does not already
+ * have — income, existing repayments and the address come from SeedFi, the statement analysis, the merchant and the
+ * BVN record. Customer-facing copy never describes the Bank's internal process.
  */
 export function EnhancedReviewStep() {
   const { api, base, view } = useCheckout();
@@ -57,10 +57,10 @@ export function EnhancedReviewStep() {
     <StepCard
       eyebrow="Step 2 · Confirm eligibility"
       title="Tell us where you earn your income"
-      description="A credit officer will look at your application. Two quick answers help them — everything else we already have."
+      description="Two quick answers and we can finish checking your application."
     >
       {clarification && (
-        <Alert tone="warning" title="Our credit officer asked for clarification">
+        <Alert tone="warning" title="We need a little more detail">
           {clarification}
         </Alert>
       )}
@@ -98,7 +98,7 @@ export function EnhancedReviewStep() {
           )}
         </fieldset>
 
-        <Why>Your income and existing repayments come from your credit report and bank statement, so we don’t ask for them. These answers are kept confidential and never shared with the merchant.</Why>
+        <Why>Your answers are kept confidential and never shared with the merchant.</Why>
         <ErrorNotice error={error} />
         <Button type="submit" size="lg" block loading={busy === 'submit'}>
           Send to the Bank for review
@@ -112,9 +112,9 @@ export function EnhancedPendingStep() {
   const { view, summary } = useCheckout();
   const clarification = view.enhanced_review?.status === 'CLARIFICATION_REQUESTED' ? view.enhanced_review.clarification_note : null;
   return (
-    <StepCard eyebrow="Step 2 · Confirm eligibility" title="Your information is under review" description="A credit officer is reviewing your details. We will notify you as soon as there is an update.">
+    <StepCard eyebrow="Step 2 · Confirm eligibility" title="We’re checking your application" description="We’ll let you know as soon as there’s an update.">
       {clarification && (
-        <Alert tone="warning" title="Note from our credit officer">
+        <Alert tone="warning" title="A note about your application">
           {clarification}
         </Alert>
       )}

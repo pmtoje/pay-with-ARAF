@@ -49,7 +49,7 @@ export function IncomeProfileStep({ onDone }: { onDone?: () => void }) {
           checked={choice === 'BUSINESS_OWNER'}
           onChange={setChoice}
           title="I own a business or am self-employed"
-          description="We’ll need 12 months of statements. A member of our team reviews business income manually and aims to contact you within 24–48 hours (a target, not a guarantee)."
+          description="We’ll need 12 months of statements from the account your business uses. Most business owners get an indicative offer in minutes."
         />
       </fieldset>
       <Why>Statements let us confirm your income and existing commitments. We look at transaction patterns only — never your passwords.</Why>
