@@ -65,9 +65,15 @@ components:
             last_name: { type: string, maxLength: 80 }
             date_of_birth: { type: string, format: date, description: Pre-fills identity; still confirmed by OTP to the BVN-linked phone }
             bvn: { type: string, pattern: '^\d{11}$', description: Optional. Encrypted at rest, never returned or logged, never in URLs }
+            gender: { type: string, enum: [male, female], description: As on the BVN record. Only needed if the BVN record lacks it }
+            income_type: { type: string, enum: [SALARY, BUSINESS], description: How the shopper earns. Skips the "How do you earn?" step }
+            employer_name: { type: string, maxLength: 120, description: With income_type SALARY }
+            business_name: { type: string, maxLength: 120, description: With income_type BUSINESS }
+            nature_of_business: { type: string, maxLength: 200 }
             address:
               type: object
               properties: { line1: { type: string }, city: { type: string }, state: { type: string } }
+        customer_equity_amount: { type: integer, description: 'kobo; equity (down payment) the shopper already agreed with you. Used as their choice when within the allowed range; otherwise they choose' }
         return_url: { type: string, format: uri, description: Origin must be approved for the partner }
         cancel_url: { type: string, format: uri }
         revises_session_id: { type: string, description: Supersede an active session with a revised cart }

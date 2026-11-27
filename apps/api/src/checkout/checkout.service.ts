@@ -151,7 +151,8 @@ export class CheckoutService {
         },
       });
       // Details the merchant already has: encrypted (bound to this session) and never returned to it.
-      const given = Object.fromEntries(Object.entries(input.customer ?? {}).filter(([, v]) => v !== undefined && v !== ''));
+      const given: Record<string, unknown> = Object.fromEntries(Object.entries(input.customer ?? {}).filter(([, v]) => v !== undefined && v !== ''));
+      if (input.customer_equity_amount !== undefined && input.customer_equity_amount > 0 && input.customer_equity_amount < input.amount) given.equity_amount = input.customer_equity_amount;
       let prefill: Record<string, unknown> | null = Object.keys(given).length ? given : null;
       if (!prefill && revises) {
         const old = await tx.checkoutSession.findUniqueOrThrow({ where: { id: revises.sessionId }, select: { customerPrefillEncrypted: true } });
@@ -167,6 +168,8 @@ export class CheckoutService {
           orderId: order.id,
           status: 'CREATED',
           purchaseAmountKobo: BigInt(input.amount),
+          // Equity agreed at the merchant starts as the shopper's choice (kept only if within the allowed range).
+          ...(typeof given.equity_amount === 'number' ? { contributionAmountKobo: BigInt(given.equity_amount) } : {}),
           vendorId: vendors[0].id,
           creditPolicyVersionId: policyVersion.id,
           // Product pricing is fixed for the life of the application.

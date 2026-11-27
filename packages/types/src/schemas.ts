@@ -35,6 +35,11 @@ export const createCheckoutSessionSchema = z
         bvn: z.string().regex(/^\d{11}$/).optional(),
         /** As on the BVN record; used for the credit check when the BVN service does not return it. */
         gender: z.enum(['male', 'female']).optional(),
+        /** How the shopper earns. Skips the "How do you earn?" step. */
+        income_type: z.enum(['SALARY', 'BUSINESS']).optional(),
+        employer_name: z.string().trim().min(1).max(120).optional(),
+        business_name: z.string().trim().min(1).max(120).optional(),
+        nature_of_business: z.string().trim().min(1).max(200).optional(),
         address: z
           .object({ line1: z.string().trim().min(1).max(200), city: z.string().trim().min(1).max(80), state: z.string().trim().min(1).max(80) })
           .strict()
@@ -42,6 +47,11 @@ export const createCheckoutSessionSchema = z
       })
       .strict()
       .default({}),
+    /**
+     * Equity (down payment) the shopper already agreed with the merchant, in kobo. Used as the shopper's equity
+     * choice when it is within the allowed range; otherwise the shopper chooses. Paid to the merchant.
+     */
+    customer_equity_amount: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     return_url: z.string().url().max(2048),
     cancel_url: z.string().url().max(2048),
     revises_session_id: z.string().max(80).optional(),

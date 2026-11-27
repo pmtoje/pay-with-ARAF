@@ -5,6 +5,8 @@
 - Ask only what is necessary (D-036): gender only when the BVN record and the merchant both lack it; the
   credit-review form cut from 12 questions to how the customer earns and where; the answer pre-selects the
   income step. Code-delivery wording points to the BVN-linked phone again.
+- New optional merchant fields `income_type`, `employer_name`, `business_name`, `nature_of_business` and
+  `customer_equity_amount` skip the questions they answer.
 ### Added
 - Live SeedFi Seed Score adapter (API v2.0) and live Periculum Insights adapter (PDF), switched on by
   `SEEDFI_MODE` / `PERICULUM_MODE` (D-035).

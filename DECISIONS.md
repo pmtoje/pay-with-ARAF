@@ -301,6 +301,14 @@ Requested 2026-11-27: "if the detail isn't necessary, please don't ask for it."
 * **Business owners** use the same checkout: 12 months of statements, all repayments ≤ 10% of average monthly
   turnover (D-025), and Periculum's BUSINESS statement type.
 * **Credit Risk** may ask for any removed question to come back; the API still accepts the old fields.
+* **Take what the merchant passes; ask only what remains.** Merchants may also send `income_type`,
+  `employer_name` / `business_name` / `nature_of_business` and `customer_equity_amount`:
+  - With `income_type` (plus the employer or business name where needed), the eligibility form and the
+    "How do you earn?" step are skipped.
+  - The agreed equity is used without asking again, if it is within the allowed range; the customer can still
+    change it.
+  - Choosing the repayment account is kept, because the customer must confirm which account is debited. A single
+    eligible account is pre-selected.
 * **Customer wording never describes the Bank's internal process** (credit officers, manual review, credit
   reports, analysts): the customer sees that the application is being checked. Exception: the consent texts
   still name SeedFi and Periculum, because data-protection rules require third-party processors to be disclosed

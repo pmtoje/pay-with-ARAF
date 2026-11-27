@@ -13,8 +13,8 @@ const pct = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(2)}%`;
 export function OfferStep() {
   const { view } = useCheckout();
   const [comparing, setComparing] = useState(false);
-  // The equity screen comes first; once an offer exists the customer has already chosen.
-  const [equityChosen, setEquityChosen] = useState(view.state === 'OFFER_PRESENTED');
+  // The equity screen comes first; once an offer exists, or the merchant sent the agreed equity, it is already chosen.
+  const [equityChosen, setEquityChosen] = useState(view.state === 'OFFER_PRESENTED' || !!view.equity?.from_merchant);
   if (view.eligibility?.reasons.includes('CART_REVISION_REQUIRED')) return <CartRevision />;
   if (view.state === 'OFFER_PRESENTED' && view.offer && view.offer.status === 'PRESENTED' && !comparing) return <OfferReview onChange={() => setComparing(true)} />;
   return (

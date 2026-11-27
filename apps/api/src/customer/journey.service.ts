@@ -72,6 +72,11 @@ export interface MerchantPrefill {
   date_of_birth?: string;
   bvn?: string;
   gender?: 'male' | 'female';
+  income_type?: 'SALARY' | 'BUSINESS';
+  employer_name?: string;
+  business_name?: string;
+  nature_of_business?: string;
+  equity_amount?: number;
   address?: { line1: string; city: string; state: string };
 }
 
@@ -162,6 +167,8 @@ export class JourneyService {
         bvn_hint: pre.bvn ? `•••••••••${pre.bvn.slice(-2)}` : null,
         date_of_birth: !!pre.date_of_birth,
         gender: !!pre.gender,
+        income_type: !!pre.income_type,
+        equity: typeof pre.equity_amount === 'number',
         name: !!(pre.first_name && pre.last_name),
         email: !!pre.email,
         phone: !!pre.phone,
@@ -544,7 +551,10 @@ export class JourneyService {
         await tx.enhancedReview.create({
           data: { applicationId, queue: band === 'NO_SCORE' ? 'THIN_FILE' : 'FAIR_CREDIT', status: 'AWAITING_CUSTOMER', requestedFields: ['employment_status', 'employer_name', 'employment_duration_months', 'business_name', 'nature_of_business', 'business_duration_months'], slaDueAt: new Date(Date.now() + 48 * 3600_000) },
         });
-        await this.emitMerchant(tx, locked, 'application.action_required');
+        // The merchant already sent how the shopper earns and where: nothing to ask.
+        const fromMerchant = this.enhancedFromPrefill(await this.prefillFor(locked.checkoutSessionId));
+        if (fromMerchant) await this.recordEnhancedInfo(tx, await tx.financingApplication.findUniqueOrThrow({ where: { id: applicationId } }), fromMerchant, SYSTEM_ACTOR);
+        else await this.emitMerchant(tx, locked, 'application.action_required');
       } else {
         await this.state.transitionApplication(tx, locked, 'ACCOUNT_VERIFICATION_PENDING', SYSTEM_ACTOR);
       }
@@ -558,19 +568,49 @@ export class JourneyService {
     const input = enhancedSchema.parse(body);
     await this.prisma.$transaction(async (tx) => {
       const app = await this.ctx.lockApplication(tx, applicationId);
+      await this.recordEnhancedInfo(tx, app, input, req.actor);
+    });
+    return this.view(applicationId, req);
+  }
+
+  /** Store the eligibility answers and send the application on for checking (customer or merchant pre-fill). */
+  private async recordEnhancedInfo(tx: Tx, app: FinancingApplication, input: z.infer<typeof enhancedSchema>, actor: Actor) {
+    {
+      const applicationId = app.id;
       if (app.status !== 'ENHANCED_REVIEW_REQUIRED') throw new AppError('INVALID_STATE');
       const review = await tx.enhancedReview.findFirst({ where: { applicationId, status: { in: ['AWAITING_CUSTOMER', 'CLARIFICATION_REQUESTED'] } }, orderBy: { createdAt: 'desc' } });
       if (!review) throw new AppError('INVALID_STATE');
       await tx.enhancedReview.update({ where: { id: review.id }, data: { status: 'PENDING', formDataEncrypted: this.crypto.encryptJson(input, `review:${review.id}`) } });
-      await this.state.transitionApplication(tx, app, 'ENHANCED_REVIEW_PENDING', req.actor);
+      await this.state.transitionApplication(tx, app, 'ENHANCED_REVIEW_PENDING', actor);
       await this.notifications.enqueue(tx, {
         environment: app.environment, audience: 'BANK', channel: 'IN_APP', templateCode: 'BANK_MANUAL_REVIEW', destination: 'review.perform',
         applicationId: app.id, applicationReference: app.reference, vars: { reference: app.reference, queue: review.queue },
       });
       await this.emitMerchant(tx, app, 'application.under_review');
-      await this.audit.record(req.actor, { action: 'customer.enhanced_info_submitted', resourceType: 'ENHANCED_REVIEW', resourceId: review.id }, tx);
-    });
-    return this.view(applicationId, req);
+      await this.audit.record(actor, { action: 'customer.enhanced_info_submitted', resourceType: 'ENHANCED_REVIEW', resourceId: review.id }, tx);
+    }
+  }
+
+  /** True while the equity in use is the amount the shopper agreed with the merchant. */
+  private async equityFromMerchant(app: FinancingApplication): Promise<boolean> {
+    const pre = await this.prefillFor(app.checkoutSessionId);
+    return typeof pre.equity_amount === 'number' && pre.equity_amount > 0 && BigInt(pre.equity_amount) === app.contributionAmountKobo;
+  }
+
+  /** The eligibility answers the merchant already sent, if they are complete enough to skip the form. */
+  private enhancedFromPrefill(pre: MerchantPrefill): z.infer<typeof enhancedSchema> | null {
+    if (pre.income_type === 'SALARY' && pre.employer_name) return { employment_status: 'EMPLOYED', employer_name: pre.employer_name };
+    if (pre.income_type === 'BUSINESS' && pre.business_name) return { employment_status: 'SELF_EMPLOYED', business_name: pre.business_name, ...(pre.nature_of_business ? { nature_of_business: pre.nature_of_business } : {}) };
+    return null;
+  }
+
+  /** How the shopper earns, from the merchant: skips the "How do you earn?" step once the account is confirmed. */
+  private async applyPrefilledIncome(tx: Tx, applicationId: string, sessionId: string, actor: Actor) {
+    const pre = await this.prefillFor(sessionId);
+    if (!pre.income_type) return;
+    const fresh = await tx.financingApplication.findUniqueOrThrow({ where: { id: applicationId } });
+    if (fresh.status !== 'ACCOUNT_VERIFIED') return;
+    await this.state.transitionApplication(tx, fresh, 'STATEMENT_PENDING', actor, { data: { incomeProfile: pre.income_type === 'BUSINESS' ? 'BUSINESS_OWNER' : 'SALARY_EARNER' }, reason: 'MERCHANT_PREFILL' });
   }
 
   // ---- AltBank account verification ----------------------------------------------------
@@ -609,6 +649,7 @@ export class JourneyService {
       if (!acct || acct.status !== 'ACTIVE') throw new AppError('ACCOUNT_NOT_ELIGIBLE');
       await this.state.transitionApplication(tx, app, 'ACCOUNT_VERIFIED', req.actor, { data: { selectedAccountId: acct.id } });
       await this.audit.record(req.actor, { action: 'customer.account_selected', resourceType: 'APPLICATION', resourceId: applicationId, after: { account: acct.accountNumberMasked } }, tx);
+      await this.applyPrefilledIncome(tx, applicationId, app.checkoutSessionId, SYSTEM_ACTOR);
     });
     return this.view(applicationId, req);
   }
@@ -702,6 +743,7 @@ export class JourneyService {
       await tx.accountOpeningRequest.update({ where: { id: row.id }, data: { status: 'VERIFIED', verifiedAccountId: acct.id, verifiedAt: new Date() } });
       if (locked.status === 'ACCOUNT_OPENING_PENDING' || locked.status === 'ACCOUNT_VERIFICATION_PENDING') {
         await this.state.transitionApplication(tx, locked, 'ACCOUNT_VERIFIED', actor, { data: { selectedAccountId: acct.id }, reason: 'NEW_ACCOUNT_VERIFIED' });
+        await this.applyPrefilledIncome(tx, locked.id, locked.checkoutSessionId, SYSTEM_ACTOR);
       }
       await this.audit.record(actor, { action: 'customer.account_opening_verified', resourceType: 'APPLICATION', resourceId: app.id, after: { account: masked } }, tx);
     });
@@ -835,7 +877,7 @@ export class JourneyService {
         : null,
       offer: accepted ? presentOffer(accepted) : presented ? presentOffer(presented) : null,
       // Equity is paid to the merchant (not the Bank) once the Bank approves; the customer returns to the merchant to pay.
-      equity: { ...equityView(app), purchase_amount: n(app.purchaseAmountKobo), financed_amount: n(app.purchaseAmountKobo - app.contributionAmountKobo), pay_url: equityView(app).payable ? session.returnUrl : null },
+      equity: { ...equityView(app), from_merchant: await this.equityFromMerchant(app), purchase_amount: n(app.purchaseAmountKobo), financed_amount: n(app.purchaseAmountKobo - app.contributionAmountKobo), pay_url: equityView(app).payable ? session.returnUrl : null },
       annual_profit_rate_percent: app.annualProfitRateBps / 100,
       documents: docs.map((d) => ({ id: d.id, type: d.docType, version: d.version, status: d.status, signed_at: d.signedAt })),
       mandate: mandate ? { status: mandate.status, reference: mandate.mandateReference, failure: mandate.failureCode } : null,

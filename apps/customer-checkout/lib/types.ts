@@ -21,7 +21,7 @@ export interface Summary {
   /** Merchant websites approved to embed this checkout. */
   embed_origins?: string[];
   /** Which details the merchant already provided (values stay on the server). */
-  prefill?: { from: string; bvn: boolean; bvn_hint: string | null; date_of_birth: boolean; gender?: boolean; name: boolean; email: boolean; phone: boolean; address: boolean };
+  prefill?: { from: string; bvn: boolean; bvn_hint: string | null; date_of_birth: boolean; gender?: boolean; income_type?: boolean; equity?: boolean; name: boolean; email: boolean; phone: boolean; address: boolean };
   expires_at: string;
   expired: boolean;
   superseded_by: string | null;
@@ -89,6 +89,8 @@ export interface View {
 
 export interface EquityView {
   required: boolean;
+  /** The equity in use is the amount agreed with the merchant (not asked again; can still be changed). */
+  from_merchant?: boolean;
   amount: number;
   status: 'NOT_REQUIRED' | 'DUE_AFTER_APPROVAL' | 'AWAITING_PAYMENT' | 'CONFIRMED';
   payable: boolean;
