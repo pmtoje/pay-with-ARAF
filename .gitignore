@@ -16,3 +16,5 @@ next-env.d.ts
 storage-test/
 dump.rdb
 SANDBOX_CREDENTIALS.local.md
+.opencode
+npm-cache/

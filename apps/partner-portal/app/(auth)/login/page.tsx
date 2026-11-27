@@ -23,7 +23,6 @@ export default function LoginPage() {
     const n = q.get('next');
     // Only same-origin relative paths (prevents open redirects).
     if (n && n.startsWith('/') && !n.startsWith('//') && !n.startsWith('/login')) setNext(n);
-    if (q.get('expired')) setNotice('Your session expired. Please sign in again.');
     if (q.get('signed_out')) setNotice('You have been signed out.');
     if (q.get('activated')) setNotice('Your account is active. Sign in with your password and a fresh authenticator code.');
   }, []);

@@ -77,8 +77,8 @@ export class NotificationsService {
         channel: req.channel,
         templateCode: req.templateCode,
         subject,
-        // OTP codes are never persisted in notification history.
-        body: req.templateCode === 'IDENTITY_OTP' ? 'Verification code sent.' : body,
+        // OTP codes and invitation links are never persisted in notification history.
+        body: req.templateCode === 'IDENTITY_OTP' ? 'Verification code sent.' : req.templateCode === 'USER_INVITATION' ? 'Invitation sent.' : body,
         status,
         providerRef,
         sentAt: status === 'SENT' ? new Date() : null,

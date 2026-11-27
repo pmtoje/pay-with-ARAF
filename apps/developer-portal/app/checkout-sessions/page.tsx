@@ -54,7 +54,7 @@ export default function CheckoutSessions() {
           { name: 'customer.phone', type: 'string', description: <>10–15 digits, optional leading <code>+</code> (e.g. <code>+2348030000001</code>).</> },
           { name: 'customer.first_name / last_name', type: 'string (≤80)', description: 'Send whatever you already collected — the hosted checkout pre-fills it and only asks the shopper for what is missing.' },
           { name: 'customer.address', type: '{ line1, city, state }', description: 'Delivery address. Pre-fills account opening for new-to-bank customers.' },
-          { name: 'customer.date_of_birth', type: 'YYYY-MM-DD', description: 'If provided, the shopper is not asked for it. Identity is still confirmed with a one-time code to the BVN-linked phone.' },
+          { name: 'customer.date_of_birth', type: 'YYYY-MM-DD', description: 'If provided, the shopper is not asked for it. Identity is still confirmed with a one-time code sent to the customer email.' },
           { name: 'customer.bvn', type: '11 digits', description: <>Only if you already hold it lawfully (e.g. KYC-regulated partners). Encrypted at rest, never returned to you, never put in URLs; the shopper sees only its last two digits and can replace it. If it does not match, the shopper is asked to enter it.</> },
           { name: 'return_url', type: 'URL (≤2048)', required: true, description: 'Where the customer is sent after the hosted checkout. Its origin must be on your approved list (HTTPS in production).' },
           { name: 'cancel_url', type: 'URL (≤2048)', required: true, description: 'Where the customer is sent if they abandon checkout. Same origin rules as return_url.' },

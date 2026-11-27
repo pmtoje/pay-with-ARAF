@@ -2,12 +2,13 @@
 
 import { createApiClient, type ApiError } from '@araf/ui';
 
-function redirectToLogin(err: ApiError) {
+function redirectToLogin(_err: ApiError) {
   if (typeof window === 'undefined') return;
   const p = window.location.pathname;
   if (p.startsWith('/login') || p.startsWith('/invite')) return;
   const next = encodeURIComponent(p + window.location.search);
-  window.location.assign(`/login?next=${next}&reason=${encodeURIComponent(err.code)}`);
+  // A first visit without a session is not an error state; don't show a "session ended" notice.
+  window.location.assign(`/login?next=${next}`);
 }
 
 /** API client for signed-in pages: a 401 (session expired / revoked) sends the user to sign in. */

@@ -226,7 +226,7 @@ export function CheckoutForm({ defaults }: { defaults: { name: string; phone: st
             <div className="rounded-lg border border-dashed border-border-strong bg-surface-2/40 p-4">
               <p className="text-sm font-semibold text-fg">Details for Buy Now Pay Later</p>
               <p className="mt-1 text-xs leading-relaxed text-muted">
-                AltMall sends these, with your name, phone, email and delivery address, securely to The Alternative Bank, which runs the eligibility checks. They go straight to the Bank — AltMall doesn’t keep your BVN or date of birth. You’ll confirm it’s you with a code sent to your BVN-linked phone.
+                AltMall sends these, with your name, phone, email and delivery address, securely to The Alternative Bank, which runs the eligibility checks. They go straight to the Bank — AltMall doesn’t keep your BVN or date of birth. You’ll confirm it’s you with a code sent to your email.
               </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Field label="Date of birth" required error={errors.dob}>

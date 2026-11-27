@@ -247,7 +247,7 @@ function OtpConfirm({ purpose, endpoint, cta, confirmLabel, onPreconditions }: {
   return (
     <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); confirm(); }}>
       <p className="text-sm text-muted" role="status" aria-live="polite">
-        {sent.to ? <>Enter the code sent to <span className="font-medium text-fg">{sent.to}</span>.</> : 'Enter the code we recently sent to your BVN-linked phone.'}
+        {sent.to ? <>Enter the code sent to <span className="font-medium text-fg">{sent.to}</span>.</> : 'Enter the code we recently sent to your email.'}
       </p>
       <OtpInput value={code} onChange={setCode} disabled={busy === 'sign'} label="6-digit signing code" />
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -313,7 +313,7 @@ function InformationRequest({ question }: { question: string | null }) {
 function DocumentSigning() {
   return (
     <ActionBox title="Review and sign your documents">
-      <p className="text-sm text-muted">Your financing has been approved. Please read each document, then sign them together with a one-time code sent to your phone.</p>
+      <p className="text-sm text-muted">Your financing has been approved. Please read each document, then sign them together with a one-time code sent to your email.</p>
       <DocLinks types={['PROMISE_TO_PURCHASE', 'OFFER_LETTER']} />
       <OtpConfirm purpose="DOCUMENT_SIGNING" endpoint="documents/sign" cta="Send code to sign my promise to purchase and offer letter" confirmLabel="Sign my documents" />
       <Why>Signing the promise to purchase asks the Bank to buy the item for you. The sale to you happens later, only after the Bank owns the item.</Why>

@@ -150,10 +150,10 @@ export function IdentityStep() {
           <span role="status" aria-live="polite">
             {otp.to ? (
               <>
-                We sent a 6-digit code to <span className="font-medium text-fg">{otp.to}</span>, the phone number linked to your BVN.
+                We sent a 6-digit code to <span className="font-medium text-fg">{otp.to}</span>.
               </>
             ) : (
-              'We recently sent a 6-digit code to the phone number linked to your BVN.'
+              'We recently sent a 6-digit code to the contact on your application.'
             )}{' '}
             It expires in 5 minutes.
           </span>
@@ -182,7 +182,7 @@ export function IdentityStep() {
           </p>
         )}
         <ErrorNotice error={error} />
-        <Why>Only you can receive this code. It proves you control the phone registered to your BVN — we never send it to a number typed at checkout.</Why>
+        <Why>Only you can receive this code. It proves you control the contact on your application.</Why>
         <SecurityNote />
       </StepCard>
     );
@@ -194,7 +194,7 @@ export function IdentityStep() {
       title="Let’s confirm it’s you"
       description={
         summary.prefill?.bvn && summary.prefill?.date_of_birth
-          ? `${summary.partner.name} has securely sent us your details. Give your permissions below and confirm it’s you with the code we send to your BVN-linked phone.`
+          ? `${summary.partner.name} has securely sent us your details. Give your permissions below and confirm it’s you with the code we send to your email.`
           : `To finance your ${summary.partner.name} purchase, The Alternative Bank needs to verify your identity. It takes about a minute.`
       }
     >
@@ -289,7 +289,7 @@ export function IdentityStep() {
             {({ id, describedBy, invalid }) => <Input id={id} aria-describedby={describedBy} aria-invalid={invalid} type="date" max={todayIso()} min="1900-01-01" value={dob} onChange={(e) => setDob(e.target.value)} />}
           </Field>
           )}
-          <Why>Your BVN and date of birth let us confirm your identity with the national BVN service and send a code to the phone number on your BVN record. We never show or share your full BVN.</Why>
+          <Why>Your BVN and date of birth let us confirm your identity with the national BVN service and send a code to the email you gave the merchant. We never show or share your full BVN.</Why>
         </fieldset>
 
         <ErrorNotice error={error} />

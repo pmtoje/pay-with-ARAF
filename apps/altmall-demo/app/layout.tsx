@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { SandboxBanner, themeInitScript } from '@araf/ui';
+import { themeInitScript } from '@araf/ui';
 import { CartProvider } from '@/components/cart';
 import { SiteFooter, SiteHeader } from '@/components/SiteChrome';
 import './globals.css';
@@ -22,7 +22,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2">
           Skip to content
         </a>
-        <SandboxBanner note="AltMall is a demonstration store" />
         <CartProvider>
           <SiteHeader />
           <main id="main" className="flex-1">

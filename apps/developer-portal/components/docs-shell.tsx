@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Logo, SandboxBanner, ThemeToggle, cn } from '@araf/ui';
+import { Logo, ThemeToggle, cn } from '@araf/ui';
 import { DOC_NAV } from '@/lib/nav';
 
 const TOP_LINKS = [
@@ -61,7 +61,6 @@ export function DocsShell({ children }: { children: ReactNode }) {
   }, [open]);
   return (
     <div className="min-h-screen bg-bg">
-      <SandboxBanner note="Docs describe the sandbox build" />
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2">
         Skip to content
       </a>

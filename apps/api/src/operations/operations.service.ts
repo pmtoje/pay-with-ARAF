@@ -11,7 +11,7 @@ import {
   type PaymentStatus as GatePaymentStatus,
 } from '@araf/business-rules';
 import { ProviderError } from '@araf/integrations';
-import { maskPhone, sha256Hex } from '@araf/security';
+import { sha256Hex } from '@araf/security';
 import { fulfilSchema, deliverSchema, cancelOrderSchema, returnOrderSchema } from '@araf/types';
 import type { ApprovalRequest, Environment, FinancingApplication, PaymentStatus, VendorPaymentInstruction } from '@araf/database';
 import { CONFIG, type AppConfig } from '../config';
@@ -198,8 +198,8 @@ export class OperationsService implements OnModuleInit {
     if (app.status !== expected) throw new AppError('INVALID_STATE');
     const idv = await this.prisma.identityVerification.findFirstOrThrow({ where: { applicationId, status: 'VERIFIED' } });
     const phone = this.crypto.decrypt(idv.phoneEncrypted!, `idv:${applicationId}`);
-    await this.journey.issueOtp(app, purpose, phone, req);
-    return { otp_sent_to: maskPhone(phone) };
+    const sent = await this.journey.issueOtp(app, purpose, phone, req);
+    return { otp_sent_to: sent.sentTo };
   }
 
   /** Customer e-signs the promise to purchase and offer letter (OTP-confirmed). */

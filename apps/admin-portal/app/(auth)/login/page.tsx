@@ -18,8 +18,6 @@ const SSO_ERRORS: Record<string, string> = {
 };
 
 const REASONS: Record<string, { tone: 'info' | 'warning'; text: string }> = {
-  SESSION_EXPIRED: { tone: 'warning', text: 'Your session expired. Sign in again to continue where you left off.' },
-  UNAUTHENTICATED: { tone: 'warning', text: 'Your session has ended. Sign in again to continue.' },
   MFA_REQUIRED: { tone: 'info', text: 'Complete two-factor verification to continue.' },
   SIGNED_OUT: { tone: 'info', text: 'You have signed out.' },
   ACTIVATED: { tone: 'info', text: 'Your account is active. Sign in with your new password and authenticator code.' },

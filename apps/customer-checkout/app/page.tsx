@@ -113,7 +113,7 @@ export default function Home() {
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-subtle sm:px-6">
           <span>Pay with ARAF is provided by The Alternative Bank. Financing is subject to eligibility and approval.</span>
-          <span>We will never ask for your card PIN, OTP by phone, or internet-banking password.</span>
+          <span>We will never ask for your card PIN, OTP by phone, SMS or email, or internet-banking password.</span>
         </div>
       </footer>
     </div>
