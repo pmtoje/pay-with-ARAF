@@ -8,7 +8,7 @@ export function SubmissionStep() {
   const { view } = useCheckout();
   const o = view.offer;
   return (
-    <StepCard eyebrow="Step 5 · Submit" title="Submitting your application" description="You’ve accepted the indicative offer. We’re now submitting your application to The Alternative Bank for review — it is not yet approved.">
+    <StepCard eyebrow="Step 5 · Submit" title="Submitting your application" description="You’ve accepted the indicative offer. We’re now finalising your application with The Alternative Bank — it is not yet approved.">
       <ProgressPanel title="Submitting — not yet approved" description="This usually takes a few seconds. Please keep this page open." lines={2} />
       {o && (
         <dl className="divide-y divide-border rounded-md border border-border px-4">
