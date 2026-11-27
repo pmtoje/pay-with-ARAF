@@ -96,6 +96,20 @@ See `.env.example`. Secrets (`ENCRYPTION_KEYS`, `BLIND_INDEX_KEY`, `API_KEY_PEPP
 outside local development. Encryption keys are versioned (`{"k1":…, "k2":…}` + `ENCRYPTION_ACTIVE_KEY`)
 to support rotation without re-encrypting at once.
 
+## Bank administrators' first sign-in
+Real Bank administrators (`BANK_ADMINS` in `packages/database/src/seed.ts`, e.g. paul.toje@altbank.ng) are
+never given the demo password or a computed authenticator secret. The seed emails each of them an
+invitation through Resend (`RESEND_API_KEY` and `EMAIL_FROM` must be set when it runs):
+1. Open the link in the email (valid 7 days, works once).
+2. Choose a password.
+3. Scan the QR code with Google Authenticator, Microsoft Authenticator or Authy (or, on the same phone,
+   tap *Open in authenticator app*), then enter the 6-digit code.
+4. Sign in at the admin portal with email, password and the code from the app.
+
+An account created by an earlier seed with the demo password is switched back to "awaiting set-up" and
+re-invited, so that sign-in stops working. To send a fresh link (e.g. the email was lost), run the seed
+again with `RESEND_INVITES=true`. Links are never printed to logs.
+
 ## Email (Resend)
 Set `RESEND_API_KEY` and `EMAIL_FROM` (a verified Resend sender, e.g. `no-reply@pay.araf.ng`). EMAIL
 notifications and one-time codes are sent through Resend; SMS remains on the sandbox inbox in

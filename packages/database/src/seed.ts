@@ -8,7 +8,7 @@
  */
 import { BANK_ROLES, PARTNER_ROLES, PERMISSIONS, SENSITIVE_PERMISSIONS } from '@araf/types';
 import { PROPOSED_SANDBOX_POLICY } from '@araf/business-rules';
-import { FieldEncryptor, base32Encode, hashPassword, sha256Hex } from '@araf/security';
+import { FieldEncryptor, base32Encode, hashPassword, hmacSha256Hex, randomToken, sha256Hex } from '@araf/security';
 import { createPrismaClient, POLICY_CODE } from './index';
 
 export const SANDBOX_STAFF_PASSWORD = 'Sandbox-Pass-2026!';
@@ -32,6 +32,14 @@ export const SANDBOX_STAFF: Array<{ email: string; name: string; roles: string[]
   { email: `auditor@${SANDBOX_STAFF_DOMAIN}`, name: 'Audu Auditor', roles: ['INTERNAL_AUDITOR'] },
   { email: `developer@${SANDBOX_STAFF_DOMAIN}`, name: 'Dayo Developer', roles: ['BANK_DEVELOPER'] },
   { email: `management@${SANDBOX_STAFF_DOMAIN}`, name: 'Mojisola Management', roles: ['MANAGEMENT_READONLY'] },
+];
+
+/**
+ * Real Bank administrators. They are NOT given the demo password or a computed authenticator secret
+ * (anyone with this repository could sign in as them). Instead the seed sends each an invitation by email:
+ * they choose their own password and scan a QR code into their authenticator app.
+ */
+export const BANK_ADMINS: Array<{ email: string; name: string; roles: string[] }> = [
   { email: 'tomiwa.adebanjo@altbank.ng', name: 'Tomiwa Adebanjo', roles: ['SUPER_ADMIN'] },
   { email: 'paul.toje@altbank.ng', name: 'Paul Toje', roles: ['SUPER_ADMIN'] },
 ];
@@ -162,6 +170,7 @@ async function main() {
       });
     }
   }
+  await inviteBankAdmins(prisma, encryptor, roles);
   await prisma.$disconnect();
   console.log(`Seeded ${SANDBOX_STAFF.length} sandbox staff users, ${roles.size} roles, ${perms.size} permissions, credit policy, ${TEMPLATES.length} templates.`);
 }
@@ -171,4 +180,76 @@ if (require.main === module) {
     console.error(e);
     process.exit(1);
   });
+}
+
+type Prisma = ReturnType<typeof createPrismaClient>;
+
+/**
+ * Invite each real Bank administrator who has not set up their own sign-in yet. An account created by an
+ * earlier seed with the demo password and computed secret is switched back to "awaiting set-up" (its
+ * sessions are revoked) so that guessable sign-in stops working. Invitation links are emailed through
+ * Resend and never printed.
+ */
+async function inviteBankAdmins(prisma: Prisma, encryptor: FieldEncryptor, roles: Map<string, string>) {
+  const portal = (process.env.ADMIN_PORTAL_URL ?? '').replace(/\/$/, '');
+  const stateKey = process.env.STATE_TOKEN_KEY;
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  if (!portal || !stateKey) {
+    console.log('Bank administrators: ADMIN_PORTAL_URL and STATE_TOKEN_KEY are needed to invite them; skipped.');
+    return;
+  }
+  for (const a of BANK_ADMINS) {
+    const email = a.email.toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user) {
+      const creds = await prisma.mfaCredential.findMany({ where: { userId: user.id, verifiedAt: { not: null } } });
+      const seededSecret = creds.some((c) => {
+        try {
+          return encryptor.decrypt(c.secretEncrypted, `mfa:${user.id}`) === sandboxTotpSecret(email);
+        } catch {
+          return false;
+        }
+      });
+      if (user.status === 'ACTIVE' && !seededSecret) {
+        console.log(`Bank administrator ${email}: already set up; nothing to do.`);
+        continue;
+      }
+      if (seededSecret) {
+        await prisma.$transaction([
+          prisma.mfaCredential.deleteMany({ where: { userId: user.id } }),
+          prisma.session.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: 'RESET_TO_INVITATION' } }),
+          prisma.user.update({ where: { id: user.id }, data: { status: 'PENDING_MFA' } }),
+        ]);
+        console.log(`Bank administrator ${email}: demo sign-in removed; sending an invitation instead.`);
+      }
+    }
+    const pending = await prisma.userInvitation.findFirst({ where: { email, type: 'STAFF', acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } } });
+    if (pending && process.env.RESEND_INVITES !== 'true') {
+      console.log(`Bank administrator ${email}: invitation already sent (set RESEND_INVITES=true to send a new one).`);
+      continue;
+    }
+    if (!apiKey || !from) {
+      console.log(`Bank administrator ${email}: RESEND_API_KEY and EMAIL_FROM are not set, so no invitation was sent.`);
+      continue;
+    }
+    if (pending) await prisma.userInvitation.update({ where: { id: pending.id }, data: { revokedAt: new Date() } });
+    const token = randomToken('inv_', 40);
+    const roleCodes = a.roles.filter((r) => roles.has(r));
+    await prisma.userInvitation.create({
+      data: { email, fullName: a.name, type: 'STAFF', roleCodes, tokenHash: hmacSha256Hex(stateKey, `token:${token}`), expiresAt: new Date(Date.now() + 7 * 24 * 3600_000) },
+    });
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject: 'Set up your Pay with ARAF admin account',
+        text: `Hello ${a.name},\n\nYou have been given access to the Pay with ARAF admin portal.\n\nSet your password and add the account to your authenticator app (you will scan a QR code):\n${portal}/invite/${token}\n\nThis link expires in 7 days and works once. If you were not expecting it, ignore this email.`,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    }).catch((e: Error) => ({ ok: false, status: 0, text: async () => e.message }) as unknown as Response);
+    console.log(res.ok ? `Bank administrator ${email}: invitation emailed.` : `Bank administrator ${email}: invitation NOT emailed (Resend answered ${res.status}).`);
+  }
 }
