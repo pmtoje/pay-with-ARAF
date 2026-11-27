@@ -14,8 +14,11 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(new URL('.', import.meta.url).pathname, '..');
+const envFile = process.env.ARAF_ENV_FILE ?? '.env';
+const envPath = resolve(root, envFile);
+if (!existsSync(envPath)) throw new Error(`Environment file not found: ${envFile} (create it or set ARAF_ENV_FILE)`);
 const env = Object.fromEntries(
-  readFileSync(resolve(root, '.env'), 'utf8')
+  readFileSync(envPath, 'utf8')
     .split('\n')
     .map((l) => /^([A-Z0-9_]+)=(.*)$/.exec(l.trim()))
     .filter(Boolean)
@@ -23,7 +26,18 @@ const env = Object.fromEntries(
 );
 if (env.APP_ENV === 'production') throw new Error('Refusing to bootstrap synthetic demo data in production.');
 const API = process.env.ARAF_API_URL ?? env.PUBLIC_API_URL ?? 'http://localhost:4000';
-const ALTMALL = env.ALTMALL_URL ?? 'http://localhost:3005';
+const ALTMALL = (process.env.ALTMALL_URL ?? env.ALTMALL_URL ?? 'http://localhost:3005').replace(/\/$/, '');
+const ALTMALL_DB =
+  process.env.ALTMALL_DATABASE_URL ??
+  env.ALTMALL_DATABASE_URL ??
+  (env.DATABASE_URL ? env.DATABASE_URL.replace(/\/[^/]+$/, '/altmall') : 'postgresql://araf:araf_local_dev@localhost:5432/altmall');
+const ALTMALL_DB_SCHEMA = (process.env.ALTMALL_DB_SCHEMA ?? env.ALTMALL_DB_SCHEMA ?? '').trim();
+if (!process.env.ALTMALL_DATABASE_URL && !env.ALTMALL_DATABASE_URL && /supabase/i.test(env.DATABASE_URL ?? '')) {
+  console.warn(
+    'ALTMALL_DATABASE_URL is not set; deriving a /altmall database path. ' +
+      'For a single Supabase project, set ALTMALL_DATABASE_URL to the altmall role/schema connection string.',
+  );
+}
 const DOMAIN = 'sandbox.altbank.example';
 
 // ---- Minimal TOTP (RFC 6238) ---------------------------------------------------------------
@@ -213,7 +227,8 @@ async function main() {
       `ARAF_SECRET_KEY=${key.secret}`,
       `ARAF_WEBHOOK_SECRET=${hook.signing_secret}`,
       `ALTMALL_URL=${ALTMALL}`,
-      `ALTMALL_DATABASE_URL=${env.DATABASE_URL.replace(/\/[^/]+$/, '/altmall')}`,
+      `ALTMALL_DATABASE_URL=${ALTMALL_DB}`,
+      ...(ALTMALL_DB_SCHEMA ? [`ALTMALL_DB_SCHEMA=${ALTMALL_DB_SCHEMA}`] : []),
       '',
     ].join('\n'),
     { mode: 0o600 },

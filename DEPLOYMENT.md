@@ -82,6 +82,20 @@ migration). Deploy with `prisma migrate deploy` (never `migrate reset` outside d
 databases). Practice: expand → migrate data → contract, so the previous release keeps working
 during roll-out (backward-compatible migrations).
 
+## Shared database (Supabase)
+AltMall normally has its own database. When it shares the Pay with ARAF Supabase project, its tables
+stay in a dedicated `altmall` schema — never `public`. Provision the schema and the `altmall_app`
+role once, as `postgres`, from the Supabase SQL editor:
+
+1. Set a strong password in `infrastructure/supabase/altmall-schema.sql` (from the secrets manager).
+2. Run the file. It creates the schema/role, grants access and sets the role's `search_path`.
+3. Point `ALTMALL_DATABASE_URL` at the pooler with the `altmall_app.<project-ref>` username, set
+   `ALTMALL_DB_SCHEMA=altmall` and `ALTMALL_DB_POOL_MAX=1` for serverless hosts.
+
+The demo store fails closed if it connects while `ALTMALL_DB_SCHEMA` is set but the active schema
+differs, so a missing grant cannot silently create tables in `public`. Local Docker continues to use
+a separate `altmall` database (`infrastructure/docker/init-altmall.sql`).
+
 ## Release & approval gates
 * CI (`.github/workflows/ci.yml`) must pass: secret scan, unit + integration + end-to-end tests,
   web builds, dependency audit, container build/scan.

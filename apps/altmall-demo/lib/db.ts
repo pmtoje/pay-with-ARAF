@@ -13,7 +13,15 @@ const g = globalThis as G;
 
 function pool(): Pool {
   if (!g.__altmallPool) {
-    g.__altmallPool = new Pool({ connectionString: config.databaseUrl, max: 10, idleTimeoutMillis: 30_000 });
+    const max = Number(process.env.ALTMALL_DB_POOL_MAX ?? 10);
+    g.__altmallPool = new Pool({
+      connectionString: config.databaseUrl,
+      max: Number.isFinite(max) && max > 0 ? max : 10,
+      idleTimeoutMillis: 30_000,
+      // When AltMall shares the ARAF Supabase project, keep its tables in a dedicated schema.
+      // The role should also default to this search_path; this makes it explicit per connection.
+      ...(config.dbSchema ? { options: `-c search_path=${config.dbSchema},public` } : {}),
+    });
     g.__altmallPool.on('error', (err) => console.error('[altmall] pg pool error', err.message));
   }
   return g.__altmallPool;
@@ -122,9 +130,22 @@ export const DEMO_CUSTOMER = { email: 'demo@altmall.example', password: 'Demo-Sh
 export async function ensureSchema(): Promise<void> {
   if (!g.__altmallSchema) {
     g.__altmallSchema = (async () => {
+      const demoPasswordHash = await hashPassword(DEMO_CUSTOMER.password);
       const c = await pool().connect();
       try {
-        await c.query('SELECT pg_advisory_lock(hashtext($1))', ['altmall-schema']);
+        if (config.dbSchema) {
+          const { rows } = await c.query<{ schema: string | null }>('SELECT current_schema() AS schema');
+          if (rows[0]?.schema !== config.dbSchema) {
+            throw new Error(
+              `AltMall is connected to schema "${rows[0]?.schema ?? 'none'}" but ALTMALL_DB_SCHEMA=${config.dbSchema}. ` +
+                'Create the schema and grant the role access before starting the app.',
+            );
+          }
+        }
+        // Transaction-scoped lock: safe with Supabase's transaction pooler, where session
+        // advisory locks (pg_advisory_lock) are not supported.
+        await c.query('BEGIN');
+        await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['altmall-schema']);
         await c.query(SCHEMA);
         const seeded = await c.query('SELECT 1 FROM customers WHERE email = $1', [DEMO_CUSTOMER.email]);
         if (!seeded.rowCount) {
@@ -132,12 +153,15 @@ export async function ensureSchema(): Promise<void> {
             DEMO_CUSTOMER.email,
             DEMO_CUSTOMER.name,
             DEMO_CUSTOMER.phone,
-            await hashPassword(DEMO_CUSTOMER.password),
+            demoPasswordHash,
           ]);
         }
         await c.query(`INSERT INTO settings (key, value) VALUES ('webhook_fail_remaining', '0') ON CONFLICT (key) DO NOTHING`);
+        await c.query('COMMIT');
+      } catch (err) {
+        await c.query('ROLLBACK').catch(() => undefined);
+        throw err;
       } finally {
-        await c.query('SELECT pg_advisory_unlock(hashtext($1))', ['altmall-schema']).catch(() => undefined);
         c.release();
       }
     })().catch((err) => {

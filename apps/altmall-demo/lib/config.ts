@@ -7,6 +7,12 @@ export const config = {
   arafWebhookSecret: process.env.ARAF_WEBHOOK_SECRET ?? '',
   altmallUrl: (process.env.ALTMALL_URL ?? 'http://localhost:3005').replace(/\/$/, ''),
   databaseUrl: process.env.ALTMALL_DATABASE_URL ?? 'postgresql://araf:araf_local_dev@localhost:5432/altmall',
+  /**
+   * Set to `altmall` when the demo store shares the Pay with ARAF Supabase project.
+   * The schema must exist and be writable by the database role; the app refuses to
+   * create its tables in `public` when this is set.
+   */
+  dbSchema: (process.env.ALTMALL_DB_SCHEMA ?? '').trim(),
   /** Demo back-office password (sandbox only). Override with ALTMALL_VENDOR_PASSWORD. */
   vendorPassword: process.env.ALTMALL_VENDOR_PASSWORD ?? 'Vendor-Demo-2026!',
   webhookToleranceSeconds: 300,
