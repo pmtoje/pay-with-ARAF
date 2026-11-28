@@ -482,9 +482,16 @@ function Payments({ a, onChanged }: { a: AppDetail; onChanged: () => void }) {
       setBusy(null);
     }
   };
-  if (!a.payments.length) return <Card><EmptyState title="No vendor payment instructions" description={a.payment_blockers?.length ? `Payment is blocked by: ${a.payment_blockers.map(humanize).join(', ')}.` : 'Instructions are created by a Settlement Officer after booking.'} /></Card>;
+  if (!a.payments.length)
+    return (
+      <>
+        <BackupCardPanel applicationId={a.id} />
+        <Card><EmptyState title="No vendor payment instructions" description={a.payment_blockers?.length ? `Payment is blocked by: ${a.payment_blockers.map(humanize).join(', ')}.` : 'Instructions are created by a Settlement Officer after booking.'} /></Card>
+      </>
+    );
   return (
     <>
+      <BackupCardPanel applicationId={a.id} />
       <div aria-live="polite">{msg && <Alert tone="success">{msg}</Alert>}{error ? <ErrorAlert error={error} title="Reconciliation failed" /> : null}</div>
       {a.payments.map((p) => (
         <Section
@@ -521,6 +528,90 @@ function Payments({ a, onChanged }: { a: AppDetail; onChanged: () => void }) {
         </Section>
       )}
     </>
+  );
+}
+
+interface BackupCard {
+  card: { status: string; last4: string | null; card_type: string | null; bank: string | null; expires: string | null } | null;
+  charges: Array<{ id: string; reference: string; amount: number; reason: string; status: string; gateway_response: string | null; created_at: string }>;
+}
+
+/**
+ * Backup repayment card (any bank, via Paystack). Charged only when the AltBank account is not funded:
+ * a Settlement Officer proposes the charge and a Finance Officer approves it in the Approvals inbox.
+ */
+function BackupCardPanel({ applicationId }: { applicationId: string }) {
+  const { can } = useSession();
+  const state = useApi<BackupCard>(`/api/admin/applications/${applicationId}/backup-card`);
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const d = state.data;
+  if (!d) return null;
+  const propose = async () => {
+    setBusy(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const r = await api.post<{ approval: string }>(`/api/admin/applications/${applicationId}/backup-card/charges`, { amount_naira: Number(amount.replace(/[^\d.]/g, '')), reason });
+      setMsg(`Charge proposed — approval ${r.approval} is waiting for a second officer.`);
+      setAmount('');
+      setReason('');
+      state.reload();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Section title="Backup repayment card" description="Charged only when the Alternative Bank account is not funded on a due date. Every charge needs a second officer’s approval.">
+      {!d.card ? (
+        <p className="text-sm text-muted">No backup card has been added yet.</p>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-5">
+          <div className="lg:col-span-2 space-y-4">
+            <KeyValue columns={1} items={[
+              { label: 'Card', value: `${(d.card.card_type ?? 'card').toUpperCase()} •••• ${d.card.last4 ?? ''}` },
+              { label: 'Bank', value: d.card.bank ?? '—' },
+              { label: 'Expires', value: d.card.expires ?? '—' },
+              { label: 'Status', value: <StatusBadge status={d.card.status} /> },
+            ]} />
+            {can('payment.initiate') && d.card.status === 'ACTIVE' && (
+              <div className="space-y-3 rounded-md border border-border p-4">
+                <p className="text-sm font-medium text-fg">Propose a charge for a missed instalment</p>
+                <label className="block text-xs text-muted">Amount (₦)
+                  <input className="mt-1 h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-fg" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                </label>
+                <label className="block text-xs text-muted">Reason
+                  <input className="mt-1 h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-fg" maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Instalment 2: AltBank account not funded" />
+                </label>
+                <div aria-live="polite">{msg && <Alert tone="success">{msg}</Alert>}{error ? <ErrorAlert error={error} title="Charge not proposed" /> : null}</div>
+                <Button size="sm" loading={busy} disabled={!amount || reason.trim().length < 5} onClick={() => void propose()}>
+                  {amount ? `Propose charging ${formatNaira(Math.round(Number(amount.replace(/[^\d.]/g, '')) * 100))} (needs approval)` : 'Propose a charge (needs approval)'}
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="lg:col-span-3">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-subtle">Charges</h3>
+            {d.charges.length === 0 ? (
+              <p className="text-sm text-muted">No charges.</p>
+            ) : (
+              <DataTable caption="Backup card charges" rows={d.charges} rowKey={(c) => c.id} dense columns={[
+                { key: 'a', header: 'Amount', align: 'right', cell: (c) => formatNaira(c.amount) },
+                { key: 's', header: 'Status', cell: (c) => <StatusBadge status={c.status} /> },
+                { key: 'r', header: 'Reason', cell: (c) => c.reason },
+                { key: 'g', header: 'Response', cell: (c) => c.gateway_response ?? '—' },
+                { key: 'd', header: 'Requested', cell: (c) => formatDateTime(c.created_at) },
+              ]} />
+            )}
+          </div>
+        </div>
+      )}
+    </Section>
   );
 }
 

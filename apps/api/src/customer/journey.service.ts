@@ -591,6 +591,13 @@ export class JourneyService {
     }
   }
 
+  /** Backup repayment card, masked (never the provider authorization). */
+  private async repaymentCardView(applicationId: string) {
+    const c = (await this.prisma.repaymentCard.findFirst({ where: { applicationId, status: 'ACTIVE' } })) ?? (await this.prisma.repaymentCard.findFirst({ where: { applicationId }, orderBy: { createdAt: 'desc' } }));
+    if (!c) return { status: 'NONE' as const, required: this.config.BACKUP_CARD_REQUIRED };
+    return { status: c.status, required: this.config.BACKUP_CARD_REQUIRED, last4: c.last4, card_type: c.cardType, bank: c.bank, expires: c.expMonth && c.expYear ? `${c.expMonth}/${c.expYear.slice(-2)}` : null, failure: c.failureCode };
+  }
+
   /** True while the equity in use is the amount the shopper agreed with the merchant. */
   private async equityFromMerchant(app: FinancingApplication): Promise<boolean> {
     const pre = await this.prefillFor(app.checkoutSessionId);
@@ -881,6 +888,7 @@ export class JourneyService {
       annual_profit_rate_percent: app.annualProfitRateBps / 100,
       documents: docs.map((d) => ({ id: d.id, type: d.docType, version: d.version, status: d.status, signed_at: d.signedAt })),
       mandate: mandate ? { status: mandate.status, reference: mandate.mandateReference, failure: mandate.failureCode } : null,
+      repayment_card: await this.repaymentCardView(app.id),
       vendor_payment: payment ? { status: payment.status, confirmed_at: payment.confirmedAt, simulated: payment.isSimulated } : null,
       release: release ? { status: release.status, reference: release.reference, authorized_at: release.authorizedAt } : null,
       fulfilment: fulfilment.map((f) => ({ status: f.status, at: f.createdAt, tracking_reference: f.trackingReference, carrier: f.carrier })),

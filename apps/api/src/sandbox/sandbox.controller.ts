@@ -129,6 +129,27 @@ export class SandboxController {
     if (!res) throw new AppError('NOT_FOUND');
     return { return_url: res.returnUrl };
   }
+
+  /** Sandbox stand-in for Paystack's card page (backup repayment card). */
+  @Get('card/:ref')
+  @Public()
+  async cardInfo(@Param('ref') ref: string) {
+    this.guard();
+    const rec = await this.providers.simStore.get<{ status: string; amount: string; kind: string }>('CARD_TXN', ref);
+    if (!rec || rec.kind !== 'LINK') throw new AppError('NOT_FOUND');
+    return { status: rec.status, amount: Number(rec.amount) };
+  }
+
+  @Post('card/:ref/authorize')
+  @HttpCode(200)
+  @Public()
+  async cardAuthorize(@Param('ref') ref: string, @Body() body: unknown) {
+    this.guard();
+    const { approve } = z.object({ approve: z.boolean() }).strict().parse(body);
+    const res = await this.providers.sandbox.cards.completeSimulated(ref, approve);
+    if (!res) throw new AppError('NOT_FOUND');
+    return { return_url: res.returnUrl };
+  }
 }
 
 @Controller('api/callbacks')

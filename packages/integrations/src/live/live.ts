@@ -34,6 +34,7 @@ export function liveProviders(): ProviderSet {
     periculum: failClosed('Periculum', 'Periculum (live — not configured)'),
     araf: failClosed('ARAF Workflow', 'ARAF workflow (live — not configured)'),
     remita: failClosed('Remita', 'Remita (live — not configured)'),
+    cards: failClosed('Paystack', 'Paystack cards (live — not configured)'),
     payments: failClosed('Vendor Payments', 'Vendor payments (live — not configured)'),
     notifications: failClosed('Notifications', 'Notifications (live — not configured)'),
     malware: failClosed('Malware Scanning', 'Malware scanning (live — not configured)'),

@@ -28,6 +28,7 @@ import { ReviewsService } from './credit/reviews.service';
 import { ArafService } from './araf/araf.service';
 import { ArafReportingService } from './araf/araf-reporting.service';
 import { OperationsService } from './operations/operations.service';
+import { BackupCardService } from './operations/backup-card.service';
 import { ReportsService } from './reports/reports.service';
 import { AdminService } from './admin/admin.service';
 import { AdminController } from './admin/admin.controller';
@@ -60,6 +61,7 @@ const SERVICES = [
   ArafService,
   ArafReportingService,
   OperationsService,
+  BackupCardService,
   ReportsService,
   AdminService,
   WorkerService,

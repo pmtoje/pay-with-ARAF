@@ -187,3 +187,13 @@ export async function arafApprove(h: Harness, applicationReference: string, anal
 }
 
 export { nextTotp };
+
+/** Customer links a backup debit card (any bank) through the sandbox Paystack stand-in. */
+export async function linkBackupCard(h: Harness, c: CustomerAgent, approve = true) {
+  const start = await c.post('/repayment-card/start');
+  expect(start.status, JSON.stringify(start.body)).toBe(200);
+  expect(start.body.authorization_url).toContain('/sandbox/card/');
+  const ref = decodeURIComponent(start.body.authorization_url.split('/').pop());
+  await request(h.http).post(`/api/sandbox/card/${encodeURIComponent(ref)}/authorize`).send({ approve });
+  return c.post('/repayment-card/verify', { reference: ref });
+}

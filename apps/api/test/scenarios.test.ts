@@ -2,7 +2,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { renderSimplePdf } from '../src/common/pdf';
 import { createHarness, drain, staff, type Harness, type PortalAgent } from './harness';
-import { arafApprove, cart, createCheckout, latestOtp, onboardPartner, openCheckout, toOfferAccepted, verifyIdentity, type CustomerAgent, type OnboardedPartner } from './flows';
+import { arafApprove, cart, linkBackupCard, createCheckout, latestOtp, onboardPartner, openCheckout, toOfferAccepted, verifyIdentity, type CustomerAgent, type OnboardedPartner } from './flows';
 
 /** Sandbox scenarios (spec §60) and security tests (spec §65) through the real HTTP APIs. */
 describe('Sandbox scenarios and security controls', () => {
@@ -248,6 +248,7 @@ describe('Sandbox scenarios and security controls', () => {
     const m = await fresh.post('/mandate/start');
     await request(h.http).post(`/api/sandbox/remita/${m.body.authorization_url.split('/').pop()}/authorize`).send({ approve: true });
     await fresh.post('/mandate/verify');
+    await linkBackupCard(h, fresh);
     const app = await appOf(ref);
     await cad.post(`/api/admin/applications/${app.id}/invoice/verify`);
     expect((await cad.post(`/api/admin/applications/${app.id}/booking`)).body.status).toBe('BOOKED');
@@ -475,7 +476,8 @@ describe('Sandbox scenarios and security controls', () => {
     await fresh.post('/documents/sign', { code: await latestOtp(h, res.body.session_id) });
     const m = await fresh.post('/mandate/start');
     await request(h.http).post(`/api/sandbox/remita/${m.body.authorization_url.split('/').pop()}/authorize`).send({ approve: true });
-    const v = await fresh.post('/mandate/verify');
+    let v = await fresh.post('/mandate/verify');
+    if (v.body.state === 'MANDATE_PENDING' && v.body.mandate?.status === 'ACTIVE') v = await linkBackupCard(h, fresh);
     return { c: fresh, ref, state: v.body.state as string, sessionId: res.body.session_id as string };
   }
 

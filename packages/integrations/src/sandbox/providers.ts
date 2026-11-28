@@ -6,6 +6,8 @@ import {
   type BankAccount,
   type BankAccountProvider,
   type CallContext,
+  type CardCollectionProvider,
+  type SavedCard,
   type CoreBankingProvider,
   type CreditAssessmentProvider,
   type IdentityVerificationProvider,
@@ -361,6 +363,61 @@ export class SandboxRemitaProvider implements RepaymentMandateProvider {
     const rec = await this.deps.store.get<{ status: 'AWAITING_AUTHORIZATION' | 'ACTIVE' | 'FAILED' | 'CANCELLED'; failureCode?: string }>('REMITA_MANDATE', mandateReference);
     if (!rec) throw new ProviderError('REMITA', 'NOT_FOUND');
     return { status: rec.status, failureCode: rec.failureCode };
+  }
+}
+
+// ---- Backup repayment card (Paystack stand-in) ---------------------------------------
+
+interface SimCardTxn {
+  kind: 'LINK' | 'CHARGE';
+  status: 'pending' | 'success' | 'failed';
+  amount: string;
+  transactionId: string;
+  callbackUrl?: string;
+  authorizationCode?: string;
+  gatewayResponse?: string;
+}
+
+/** Sandbox stand-in for Paystack cards: a test card page, charges that succeed unless CARD_DECLINED is forced. */
+export class SandboxCardProvider implements CardCollectionProvider {
+  readonly name = 'Paystack cards (sandbox simulator)';
+  constructor(private readonly deps: SandboxDeps) {}
+
+  async startCardLink(input: { reference: string; amountKobo: bigint; callbackUrl: string }) {
+    await this.deps.store.put<SimCardTxn>('CARD_TXN', input.reference, { kind: 'LINK', status: 'pending', amount: input.amountKobo.toString(), transactionId: `${Date.now()}${Math.floor(Math.random() * 1000)}`, callbackUrl: input.callbackUrl });
+    return { authorizationUrl: `${this.deps.checkoutBaseUrl}/sandbox/card/${encodeURIComponent(input.reference)}` };
+  }
+
+  /** The stand-in page: approve with the test card, or decline. */
+  async completeSimulated(reference: string, approve: boolean) {
+    const rec = await this.deps.store.get<SimCardTxn>('CARD_TXN', reference);
+    if (!rec || rec.kind !== 'LINK') return null;
+    if (rec.status === 'pending') {
+      await this.deps.store.put<SimCardTxn>('CARD_TXN', reference, { ...rec, status: approve ? 'success' : 'failed', authorizationCode: approve ? `AUTH_sbx_${randomBase62(10)}` : undefined, gatewayResponse: approve ? 'Approved' : 'Declined by cardholder' });
+    }
+    return { returnUrl: rec.callbackUrl! };
+  }
+
+  async verify(reference: string) {
+    const rec = await this.deps.store.get<SimCardTxn>('CARD_TXN', reference);
+    if (!rec) return { status: 'not_found' as const, transactionId: null, amountKobo: 0n, card: null, gatewayResponse: null };
+    const card: SavedCard | null = rec.authorizationCode
+      ? { authorizationCode: rec.authorizationCode, reusable: true, last4: '4081', expMonth: '12', expYear: '2030', cardType: 'visa', bank: 'TEST BANK', channel: 'card', signature: 'SIG_sbx_test_card' }
+      : null;
+    return { status: rec.status, transactionId: rec.transactionId, amountKobo: BigInt(rec.amount), card, gatewayResponse: rec.gatewayResponse ?? null };
+  }
+
+  async refund() {
+    return { status: 'processed' as const };
+  }
+
+  async charge(input: { authorizationCode: string; amountKobo: bigint; reference: string }, ctx: CallContext) {
+    const existing = await this.deps.store.get<SimCardTxn>('CARD_TXN', input.reference);
+    if (existing) return { status: existing.status === 'pending' ? ('pending' as const) : existing.status, transactionId: existing.transactionId, gatewayResponse: existing.gatewayResponse ?? null };
+    const declined = await isForced(this.deps.store, ctx, 'CARD_DECLINED');
+    const rec: SimCardTxn = { kind: 'CHARGE', status: declined ? 'failed' : 'success', amount: input.amountKobo.toString(), transactionId: `${Date.now()}${Math.floor(Math.random() * 1000)}`, authorizationCode: input.authorizationCode, gatewayResponse: declined ? 'Insufficient Funds' : 'Approved' };
+    await this.deps.store.put('CARD_TXN', input.reference, rec);
+    return { status: rec.status as 'success' | 'failed', transactionId: rec.transactionId, gatewayResponse: rec.gatewayResponse ?? null };
   }
 }
 

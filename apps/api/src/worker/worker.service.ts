@@ -1,3 +1,4 @@
+import { BackupCardService } from '../operations/backup-card.service';
 import { Injectable, Logger } from '@nestjs/common';
 import type { ApplicationState } from '@araf/business-rules';
 import { deriveMerchantStatus } from '@araf/business-rules';
@@ -31,6 +32,7 @@ export class WorkerService {
     private readonly ops: OperationsService,
     private readonly checkout: CheckoutService,
     private readonly arafReports: ArafReportingService,
+    private readonly cards: BackupCardService,
   ) {}
 
   async processOutbox(batch = 50): Promise<number> {
@@ -86,6 +88,7 @@ export class WorkerService {
     r.analysis = await this.statements.pollDueJobs();
     r.payments = await this.ops.pollPayments();
     r.mandates = await this.ops.pollMandates();
+    r.cards = await this.cards.pollPending();
     r.refunds = await this.ops.pollRefunds();
     r.araf = await this.araf.retryDueSubmissions();
     r.arafReports = await this.arafReports.deliverDue();

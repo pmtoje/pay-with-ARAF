@@ -11,6 +11,7 @@ import { PartnersService } from '../partners/partners.service';
 import { ReviewsService } from '../credit/reviews.service';
 import { ArafService } from '../araf/araf.service';
 import { OperationsService } from '../operations/operations.service';
+import { BackupCardService } from '../operations/backup-card.service';
 import { ReportsService, parseRange } from '../reports/reports.service';
 import { AdminService } from './admin.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
@@ -33,6 +34,7 @@ export class AdminController {
     private readonly webhooks: WebhooksService,
     private readonly arafReports: ArafReportingService,
     private readonly fees: FeesService,
+    private readonly cards: BackupCardService,
     @Inject(CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -220,6 +222,26 @@ export class AdminController {
   @Staff('application.read')
   application(@Param('id') id: string, @Ctx() req: AuthedRequest) {
     return this.admin.applicationDetail(id, req.actor);
+  }
+
+  /** Backup repayment card (masked) and its charges. */
+  @Get('applications/:id/backup-card')
+  @Staff('application.read')
+  async backupCard(@Param('id') id: string) {
+    const card = await this.cards.activeCard(id);
+    const charges = await this.cards.charges(id);
+    return {
+      card: this.cards.present(card),
+      charges: charges.map((c) => ({ id: c.id, reference: c.reference, amount: Number(c.amountKobo), reason: c.reason, status: c.status, gateway_response: c.gatewayResponse, created_at: c.createdAt, completed_at: c.completedAt })),
+    };
+  }
+
+  /** Propose charging the backup card for a missed instalment (maker). A second officer approves in the Approvals inbox. */
+  @Post('applications/:id/backup-card/charges')
+  @HttpCode(201)
+  @Staff('payment.initiate')
+  proposeCardCharge(@Param('id') id: string, @Body() body: unknown, @Ctx() req: AuthedRequest) {
+    return this.cards.proposeCharge(id, body, req.actor);
   }
 
   @Get('applications/:id/documents/:docId')

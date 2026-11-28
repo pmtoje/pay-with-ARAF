@@ -105,6 +105,19 @@ query, never re-sent.
 - `PAY_WITH_ARAF_CALLBACK_URL=https://api.<pwa-domain>/api/callbacks/araf`
 - `PAY_WITH_ARAF_SSO_REDIRECT_URIS`
 
+## 6b. Paystack — backup repayment card (Finance / Technology)
+**Why:** customers link a debit card from any bank, charged only when their AltBank account is not funded.
+ARAF already uses Paystack.
+
+**Ask for:**
+- Secret keys for Pay with ARAF (test, then live).
+- The settlement account.
+- Confirmation that recurring `charge_authorization` is enabled.
+- Refund permissions for the ₦50 card check.
+
+**Built:** `PAYSTACK_MODE=connected` uses `/transaction/initialize` (card channel), `/transaction/verify`,
+`/transaction/charge_authorization` and `/refund`.
+
 ## 7. Remita direct debit (Operations / Technology), after the pilot
 **Ask for:**
 - Mandate API documentation, merchant ID, service type ID and API keys.

@@ -8,6 +8,7 @@ import { JourneyService } from './journey.service';
 import { StatementsService } from './statements.service';
 import { EligibilityService } from '../credit/eligibility.service';
 import { OperationsService } from '../operations/operations.service';
+import { BackupCardService } from '../operations/backup-card.service';
 import { ArafService } from '../araf/araf.service';
 import { CustomerIdempotencyInterceptor } from './customer-idempotency.interceptor';
 
@@ -21,6 +22,7 @@ export class CustomerController {
     private readonly eligibility: EligibilityService,
     private readonly ops: OperationsService,
     private readonly araf: ArafService,
+    private readonly cards: BackupCardService,
   ) {}
 
   private appId(req: AuthedRequest) {
@@ -251,6 +253,24 @@ export class CustomerController {
   @Customer()
   async mandateVerify(@Ctx() req: AuthedRequest) {
     await this.ops.verifyMandate(this.appId(req), req.actor, req.correlationId);
+    return this.journey.view(this.appId(req), req);
+  }
+
+  /** Backup repayment card (any bank): start the card check on Paystack's page. */
+  @Post('repayment-card/start')
+  @HttpCode(200)
+  @Customer()
+  repaymentCardStart(@Ctx() req: AuthedRequest) {
+    return this.cards.start(this.appId(req));
+  }
+
+  /** Confirm the card with Paystack (never trusts the redirect). */
+  @Post('repayment-card/verify')
+  @HttpCode(200)
+  @Customer()
+  async repaymentCardVerify(@Body() body: unknown, @Ctx() req: AuthedRequest) {
+    const { reference } = z.object({ reference: z.string().max(120).optional() }).strict().parse(body ?? {});
+    await this.cards.verify(this.appId(req), reference, req.actor);
     return this.journey.view(this.appId(req), req);
   }
 

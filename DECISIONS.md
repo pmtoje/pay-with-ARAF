@@ -314,6 +314,33 @@ Requested 2026-11-27: "if the detail isn't necessary, please don't ask for it."
   still name SeedFi and Periculum, because data-protection rules require third-party processors to be disclosed
   before consent.
 
+### D-037 — Backup repayment card from any bank (Paystack)
+Requested 2026-11-28: "For repayments, we need to be able to connect other accounts by the debit card". Chosen:
+every customer still has an **Alternative Bank account** (booking and the primary direct debit), and adds a
+**debit card from any bank as a backup**, charged only when the AltBank account is not funded. Provider:
+**Paystack**, the provider ARAF already uses.
+* **Linking**, during repayment set-up:
+  - A ₦50 card check (`CARD_CHECK_AMOUNT_KOBO`) is charged and refunded immediately.
+  - Paystack's `authorization_code` is saved, encrypted, only if Paystack says it is reusable and the channel
+    is `card`.
+  - The card is verified with Paystack, never from the redirect. A worker finishes links whose redirect never
+    came back.
+  - Repayment set-up moves on to booking only when the direct-debit mandate is active **and** a backup card is
+    linked (`BACKUP_CARD_REQUIRED=true`).
+  - The card's signature is stored only as a hash (to spot one card shared across customers).
+* **Charging**, maker-checker:
+  - A Settlement Officer (`payment.initiate`) proposes a charge with a reason, capped at the deferred sale price
+    minus what has already been charged.
+  - A Finance Officer (`payment.approve`), never the proposer, approves it in the Approvals inbox.
+  - The card is then charged once under a fixed reference. An unknown outcome is reconciled with Paystack by that
+    reference and never charged again blindly.
+* **Not built here:** deciding *when* an instalment is missed (the core-banking repayment schedule). Staff raise
+  the charge today; automation can follow once core banking reports failed debits.
+* **Open:**
+  - Paystack keys and settlement account.
+  - Card-on-file and recurring-debit consent wording (Compliance).
+  - Whether the ₦50 check can be waived for cards the customer already linked.
+
 ### D-025 — Business owners: 10% of turnover, assessed automatically (PROPOSED)
 Business owners are now assessed by the engine: existing obligations plus the proposed instalment
 may not exceed 10% of average monthly turnover from the 12-month Periculum analysis. Unreliable

@@ -16,7 +16,8 @@ import { initEmbed, isEmbedded, post } from '@/lib/embed';
 export type ReturnAction =
   | { kind: 'account-opening'; state: string | null }
   | { kind: 'mono'; code: string | null; error: string | null }
-  | { kind: 'mandate' };
+  | { kind: 'mandate' }
+  | { kind: 'card'; reference: string | null };
 
 /**
  * CSRF token for this tab. Kept in memory; mirrored to sessionStorage (this tab only, cleared
@@ -232,6 +233,13 @@ export function CheckoutApp({ sessionId, returnAction }: { sessionId: string; re
             setView(await api.post<View>(`${base}/statements/mono/exchange`, { code: returnAction.code }));
             setFlash({ tone: 'success', title: 'Bank connected', body: 'We received read-only statement data from your bank.' });
           }
+        } else if (returnAction.kind === 'card') {
+          const v = await api.post<View>(`${base}/repayment-card/verify`, returnAction.reference ? { reference: returnAction.reference } : {});
+          setView(v);
+          const s = v.repayment_card?.status;
+          if (s === 'ACTIVE') setFlash({ tone: 'success', title: 'Backup card added', body: 'Thank you. The ₦50 card check is being refunded to your card.' });
+          else if (s === 'FAILED') setFlash({ tone: 'warning', title: 'That card couldn’t be added', body: 'Please try again, or use a different debit card.' });
+          else setFlash({ tone: 'info', title: 'Confirming your card', body: 'We have not received confirmation yet. We will keep checking.' });
         } else {
           const v = await api.post<View>(`${base}/mandate/verify`, {});
           setView(v);

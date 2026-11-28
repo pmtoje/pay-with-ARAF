@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHarness, drain, staff, type Harness, type PortalAgent } from './harness';
-import { arafApprove, cart, createCheckout, latestOtp, onboardPartner, openCheckout, toOfferAccepted, type OnboardedPartner } from './flows';
+import { arafApprove, cart, linkBackupCard, createCheckout, latestOtp, onboardPartner, openCheckout, toOfferAccepted, type OnboardedPartner } from './flows';
 
 /**
  * Definition of Done (spec §71) — the complete sandbox lifecycle through the real HTTP APIs:
@@ -125,7 +125,35 @@ describe('Pay with ARAF — end-to-end sandbox lifecycle', () => {
     expect((await c.post('/mandate/verify')).body.state).toBe('MANDATE_PENDING');
     await request(h.http).post(`/api/sandbox/remita/${ref}/authorize`).send({ approve: true });
     const verified = await c.post('/mandate/verify');
-    expect(verified.body.state).toBe('BOOKING_PENDING');
+    // The mandate alone is not enough: a backup debit card (any bank) is also required.
+    expect(verified.body.state).toBe('MANDATE_PENDING');
+    expect(verified.body.repayment_card).toMatchObject({ status: 'NONE', required: true });
+    // A declined card check saves nothing and keeps the application waiting.
+    const declined = await linkBackupCard(h, c, false);
+    expect(declined.body.state).toBe('MANDATE_PENDING');
+    expect(declined.body.repayment_card).toMatchObject({ status: 'FAILED', failure: 'CARD_CHECK_FAILED' });
+    const carded = await linkBackupCard(h, c);
+    expect(carded.body.state).toBe('BOOKING_PENDING');
+    expect(carded.body.repayment_card).toMatchObject({ status: 'ACTIVE', last4: '4081', bank: 'TEST BANK' });
+    // The card authorization is stored only encrypted, and the ₦50 card check was refunded.
+    const card = await h.prisma.repaymentCard.findFirstOrThrow({ where: { applicationId: appRow.id, status: 'ACTIVE' } });
+    expect(card.authorizationEncrypted).not.toContain('AUTH_sbx');
+    expect(card.refundStatus).toBe('processed');
+
+    // Backup collection when the AltBank account is not funded: one officer proposes, a second approves.
+    const proposed = await settlement.post(`/api/admin/applications/${appRow.id}/backup-card/charges`, { amount_naira: 46875, reason: 'Instalment 1: AltBank account not funded' });
+    expect(proposed.status, JSON.stringify(proposed.body)).toBe(201);
+    const tooMuch = await settlement.post(`/api/admin/applications/${appRow.id}/backup-card/charges`, { amount_naira: 999_999, reason: 'More than is owed' });
+    expect(tooMuch.status).toBe(422);
+    const approvals = (await finance.get('/api/admin/approvals?status=PENDING')).body as Array<{ id: string; reference: string }>;
+    const ap = approvals.find((a) => a.reference === proposed.body.approval)!;
+    // The maker cannot approve their own charge.
+    expect((await settlement.post(`/api/admin/approvals/${ap.id}/decide`, { decision: 'APPROVE', comment: 'self' })).status).toBeGreaterThanOrEqual(400);
+    expect((await finance.post(`/api/admin/approvals/${ap.id}/decide`, { decision: 'APPROVE', comment: 'Approved backup collection' })).status).toBe(200);
+    await new Promise((r) => setTimeout(r, 300));
+    const charges = (await settlement.get(`/api/admin/applications/${appRow.id}/backup-card`)).body;
+    expect(charges.card).toMatchObject({ last4: '4081', status: 'ACTIVE' });
+    expect(charges.charges[0]).toMatchObject({ amount: 4_687_500, status: 'SUCCESS' });
     expect(appRow.id).toBeTruthy();
   });
 

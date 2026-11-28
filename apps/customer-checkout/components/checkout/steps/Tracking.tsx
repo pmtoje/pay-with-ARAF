@@ -16,7 +16,7 @@ export function TrackingStep() {
   let action: ReactNode = null;
   if (s === 'ADDITIONAL_INFORMATION_REQUIRED') action = <InformationRequest question={view.information_request?.question ?? null} />;
   else if (s === 'DOCUMENTATION_PENDING') action = <DocumentSigning />;
-  else if (s === 'MANDATE_PENDING') action = <MandateSetup />;
+  else if (s === 'MANDATE_PENDING') action = <RepaymentSetup />;
   else if (s === 'VENDOR_PAYMENT_CONFIRMED') action = <SaleAgreement />;
   else if (s === 'GOODS_DISPATCHED') action = <DeliveryConfirm />;
 
@@ -317,6 +317,72 @@ function DocumentSigning() {
       <DocLinks types={['PROMISE_TO_PURCHASE', 'OFFER_LETTER']} />
       <OtpConfirm purpose="DOCUMENT_SIGNING" endpoint="documents/sign" cta="Send code to sign my promise to purchase and offer letter" confirmLabel="Sign my documents" />
       <Why>Signing the promise to purchase asks the Bank to buy the item for you. The sale to you happens later, only after the Bank owns the item.</Why>
+    </ActionBox>
+  );
+}
+
+/** Repayments: the direct-debit mandate on the AltBank account, plus a backup debit card from any bank. */
+function RepaymentSetup() {
+  const { view } = useCheckout();
+  const mandateDone = view.mandate?.status === 'ACTIVE';
+  const card = view.repayment_card;
+  const cardDone = !card?.required || card.status === 'ACTIVE';
+  return (
+    <div className="space-y-4">
+      {mandateDone ? (
+        <Alert tone="success" title="Direct debit authorised">
+          Repayments will be collected from {view.account?.account_number ?? 'your Alternative Bank account'}.
+        </Alert>
+      ) : (
+        <MandateSetup />
+      )}
+      {cardDone ? (
+        card?.status === 'ACTIVE' && (
+          <Alert tone="success" title="Backup card added">
+            {[card.card_type?.toUpperCase(), card.bank, card.last4 ? `•••• ${card.last4}` : null].filter(Boolean).join(' · ')}
+          </Alert>
+        )
+      ) : (
+        <BackupCardSetup />
+      )}
+    </div>
+  );
+}
+
+function BackupCardSetup() {
+  const { api, base, view } = useCheckout();
+  const { busy, error, run } = useAction();
+  const failed = view.repayment_card?.status === 'FAILED';
+  const pending = view.repayment_card?.status === 'PENDING';
+  return (
+    <ActionBox title={failed ? 'That card couldn’t be added' : 'Add a backup debit card'}>
+      <p className="text-sm text-muted">
+        {failed
+          ? 'Please try again, or use a different debit card. It can be from any bank.'
+          : `If your Alternative Bank account doesn’t have enough on a due date, we’ll charge this card instead. It can be a debit card from any bank. We charge ₦50 to check the card and refund it straight away.`}
+      </p>
+      <ErrorNotice error={error} />
+      <Button
+        size="lg"
+        block
+        loading={busy === 'card'}
+        onClick={() =>
+          void run('card', async () => {
+            const r = await api.post<{ authorization_url: string }>(`${base}/repayment-card/start`);
+            const url = safeHref(r.authorization_url);
+            if (!url) throw new Error('The card link is not valid. Please try again.');
+            window.location.assign(url);
+            await new Promise((resolve) => setTimeout(resolve, 10_000));
+          })
+        }
+      >
+        {failed ? 'Try again: add my debit card' : 'Add my debit card (₦50 check, refunded)'}
+      </Button>
+      {pending && (
+        <Button variant="ghost" block loading={busy === 'verify'} onClick={() => void run('verify', () => api.post(`${base}/repayment-card/verify`, {}))}>
+          I’ve added it — check my card now
+        </Button>
+      )}
     </ActionBox>
   );
 }

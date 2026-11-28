@@ -75,6 +75,17 @@ const schema = z.object({
   PERICULUM_CLIENT_ID: z.string().min(1).optional(),
   PERICULUM_CLIENT_SECRET: z.string().min(1).optional(),
   PERICULUM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(180000).default(60000),
+  /**
+   * Backup repayment card (any bank) through Paystack. simulator = sandbox stand-in; connected = real Paystack
+   * for both environments (test secret key for sandbox, live key for production).
+   */
+  PAYSTACK_MODE: z.enum(['simulator', 'connected']).default('simulator'),
+  PAYSTACK_SECRET_KEY: z.string().min(10).optional(),
+  PAYSTACK_BASE_URL: z.string().url().default('https://api.paystack.co'),
+  /** Card check charged (and refunded) to save the card: ₦50 by default. */
+  CARD_CHECK_AMOUNT_KOBO: z.coerce.number().int().min(5000).max(100000).default(5000),
+  /** Customers must add a backup card before booking (true) or may skip it (false). */
+  BACKUP_CARD_REQUIRED: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
   SANDBOX_OTP_VIA_MERCHANT_EMAIL: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 });
 
@@ -119,6 +130,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (c.SEEDFI_MODE === 'connected' && (!c.SEEDFI_BASE_URL || !c.SEEDFI_API_KEY)) problems.push('SEEDFI_BASE_URL and SEEDFI_API_KEY are required when SEEDFI_MODE=connected');
   if (c.PERICULUM_MODE === 'connected' && (!c.PERICULUM_CLIENT_ID || !c.PERICULUM_CLIENT_SECRET)) problems.push('PERICULUM_CLIENT_ID and PERICULUM_CLIENT_SECRET are required when PERICULUM_MODE=connected');
   if (isProd && c.SEEDFI_BASE_URL && !c.SEEDFI_BASE_URL.startsWith('https://')) problems.push('SEEDFI_BASE_URL must use https');
+  if (c.PAYSTACK_MODE === 'connected' && !c.PAYSTACK_SECRET_KEY) problems.push('PAYSTACK_SECRET_KEY is required when PAYSTACK_MODE=connected');
+  if (isProd && c.PAYSTACK_SECRET_KEY?.startsWith('sk_test_')) problems.push('A Paystack TEST secret key cannot be used in production');
   if (c.SANDBOX_OTP_VIA_MERCHANT_EMAIL && (isProd || c.PLATFORM_ENVIRONMENT === 'PRODUCTION')) problems.push('SANDBOX_OTP_VIA_MERCHANT_EMAIL is sandbox-only');
   if (problems.length) throw new Error(`Unsafe configuration refused: ${problems.join('; ')}`);
   const isSandbox = c.PLATFORM_ENVIRONMENT === 'SANDBOX';

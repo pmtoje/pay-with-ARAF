@@ -8,3 +8,4 @@ export * from './live/resend';
 export * from './storage';
 export * from './live/seedfi';
 export * from './live/periculum';
+export * from './live/paystack';

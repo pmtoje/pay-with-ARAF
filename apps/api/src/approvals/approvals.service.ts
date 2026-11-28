@@ -16,7 +16,8 @@ export type ApprovalType =
   | 'REVIEW_DECISION'
   | 'VENDOR_PAYMENT'
   | 'REFUND'
-  | 'ROLE_ASSIGNMENT';
+  | 'ROLE_ASSIGNMENT'
+  | 'BACKUP_CARD_CHARGE';
 
 export const APPROVAL_PERMISSION: Record<ApprovalType, PermissionCode> = {
   PARTNER_APPROVAL: 'partner.approve',
@@ -30,6 +31,7 @@ export const APPROVAL_PERMISSION: Record<ApprovalType, PermissionCode> = {
   VENDOR_PAYMENT: 'payment.approve',
   REFUND: 'refund.approve',
   ROLE_ASSIGNMENT: 'user.approve',
+  BACKUP_CARD_CHARGE: 'payment.approve',
 };
 
 export interface ApprovalHandler {

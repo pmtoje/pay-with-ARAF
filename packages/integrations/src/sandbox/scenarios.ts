@@ -12,7 +12,8 @@ export type ForcedOutcome =
   | 'PAYMENT_FAILURE'
   | 'PAYMENT_UNKNOWN'
   | 'ANALYSIS_FAILURE'
-  | 'ARAF_REPORTING_FAILURE';
+  | 'ARAF_REPORTING_FAILURE'
+  | 'CARD_DECLINED';
 
 export interface StatementProfile {
   kind: 'SALARY' | 'BUSINESS';

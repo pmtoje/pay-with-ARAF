@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   ArafHttpProvider,
   PericulumHttpProvider,
+  PaystackCardProvider,
+  SandboxCardProvider,
   SeedfiHttpProvider,
   EmailRoutingNotificationProvider,
   EncryptedFileStorage,
@@ -89,6 +91,7 @@ export interface SandboxProviderSet extends ProviderSet {
   mono: SandboxMonoProvider;
   remita: SandboxRemitaProvider;
   payments: SandboxPaymentProvider;
+  cards: SandboxCardProvider;
 }
 
 @Injectable()
@@ -134,6 +137,7 @@ export class ProvidersService {
       periculum: new SandboxPericulumProvider(deps),
       araf: new SandboxArafProvider(prisma),
       remita: new SandboxRemitaProvider(deps),
+      cards: new SandboxCardProvider(deps),
       payments: new SandboxPaymentProvider(deps),
       notifications: emailProvider ? new EmailRoutingNotificationProvider(emailProvider, sandboxNotifications) : sandboxNotifications,
       malware: new SandboxMalwareScanner(),
@@ -156,6 +160,9 @@ export class ProvidersService {
         // Production records never accept SeedFi staging (dummy) responses.
         rejectDummyData: config.PLATFORM_ENVIRONMENT === 'PRODUCTION',
       });
+    }
+    if (config.PAYSTACK_MODE === 'connected' && config.PAYSTACK_SECRET_KEY) {
+      this.connected.cards = new PaystackCardProvider({ secretKey: config.PAYSTACK_SECRET_KEY, baseUrl: config.PAYSTACK_BASE_URL });
     }
     if (config.PERICULUM_MODE === 'connected' && config.PERICULUM_CLIENT_ID && config.PERICULUM_CLIENT_SECRET) {
       this.connected.periculum = new PericulumHttpProvider({
@@ -185,7 +192,7 @@ export class ProvidersService {
 
   /** Whether a provider (by its call name) is served by a real, connected adapter. */
   private isConnected(provider: string): boolean {
-    return (provider === 'ARAF' && !!this.connected.araf) || (provider === 'SEEDFI' && !!this.connected.credit) || (provider === 'PERICULUM' && !!this.connected.periculum);
+    return (provider === 'ARAF' && !!this.connected.araf) || (provider === 'SEEDFI' && !!this.connected.credit) || (provider === 'PERICULUM' && !!this.connected.periculum) || (provider === 'PAYSTACK' && !!this.connected.cards);
   }
 
   isSimulated(environment: Environment): boolean {

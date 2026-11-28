@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 — 2026-11-28
+### Added
+- Backup repayment card from any bank via Paystack (D-037):
+  - Linking in the checkout during repayment set-up: ₦50 check, refunded.
+  - Live and sandbox Paystack providers.
+  - Booking waits for both the mandate and the card.
+  - Maker-checker charges with reconciliation by reference.
+  - Admin "Backup repayment card" panel.
+  - Migration `20261128100000_backup_card`.
+  - Tests: Paystack adapter; declined card, linked card, refunded check, two-officer charge.
+
 ## 0.6.0 — 2026-11-27
 ### Changed
 - Ask only what is necessary (D-036): gender only when the BVN record and the merchant both lack it; the

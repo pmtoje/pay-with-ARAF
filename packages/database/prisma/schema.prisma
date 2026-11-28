@@ -1119,6 +1119,57 @@ model RepaymentMandate {
   @@map("repayment_mandates")
 }
 
+/// Backup repayment card (any Nigerian bank), saved through Paystack. Charged only when the AltBank account is not funded.
+model RepaymentCard {
+  id                    String    @id @default(uuid())
+  applicationId         String
+  customerId            String
+  provider              String // PAYSTACK
+  /// Our reference for the card-check payment (also the provider's transaction reference).
+  linkReference         String    @unique
+  status                String // PENDING | ACTIVE | FAILED | REPLACED
+  /// Paystack authorization_code, encrypted (AAD card:<id>). Never logged or returned.
+  authorizationEncrypted String?
+  /// SHA-256 of the card signature: the same physical card across customers (fraud checks).
+  signatureHash         String?
+  last4                 String?
+  expMonth              String?
+  expYear               String?
+  cardType              String?
+  bank                  String?
+  checkAmountKobo       BigInt
+  checkTransactionId    String?
+  refundStatus          String? // pending | processed | failed
+  failureCode           String?
+  createdAt             DateTime  @default(now())
+  verifiedAt            DateTime?
+
+  @@index([applicationId, status])
+  @@index([signatureHash])
+  @@map("repayment_cards")
+}
+
+/// A charge against a backup card (approved by a second officer). Safe to retry: reconciled by reference.
+model CardCharge {
+  id              String    @id @default(uuid())
+  applicationId   String
+  cardId          String
+  reference       String    @unique
+  amountKobo      BigInt
+  reason          String
+  status          String // REQUESTED | SUCCESS | FAILED | UNKNOWN
+  providerTxnId   String?
+  gatewayResponse String?
+  approvalId      String?   @unique
+  requestedById   String?
+  approvedById    String?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([applicationId])
+  @@map("card_charges")
+}
+
 model BookingRecord {
   id                  String    @id @default(uuid())
   applicationId       String    @unique

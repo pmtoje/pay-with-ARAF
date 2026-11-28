@@ -274,7 +274,7 @@ export class OperationsService implements OnModuleInit {
         await this.state.recordTransition(tx, 'MANDATE', m.id, 'AWAITING_AUTHORIZATION', 'ACTIVE', actor, applicationId);
         await this.satisfy(tx, applicationId, 'MANDATE_ACTIVE', actor, m.mandateReference ?? undefined);
         await this.ctx.resolveExceptions(tx, applicationId, ['MANDATE_FAILURE'], 'Mandate activated', actor);
-        if (locked.status === 'MANDATE_PENDING') await this.state.transitionApplication(tx, locked, 'BOOKING_PENDING', actor);
+        await this.completeRepaymentSetupIfReady(tx, applicationId, actor);
       } else {
         const status = res.status === 'CANCELLED' ? 'CANCELLED' : 'FAILED';
         await tx.repaymentMandate.update({ where: { id: m.id }, data: { status: status === 'CANCELLED' ? 'FAILED' : 'FAILED', failureCode: res.failureCode ?? status } });
@@ -283,6 +283,20 @@ export class OperationsService implements OnModuleInit {
       }
     });
     return res.status;
+  }
+
+  /**
+   * Repayments are set up when the direct-debit mandate on the AltBank account is active AND (when required) a
+   * backup debit card from any bank is linked. Only then does the application move on to booking.
+   */
+  async completeRepaymentSetupIfReady(tx: Tx, applicationId: string, actor: Actor) {
+    const app = await tx.financingApplication.findUniqueOrThrow({ where: { id: applicationId } });
+    if (app.status !== 'MANDATE_PENDING') return false;
+    const mandate = await tx.repaymentMandate.findUnique({ where: { applicationId } });
+    if (mandate?.status !== 'ACTIVE') return false;
+    if (this.config.BACKUP_CARD_REQUIRED && !(await tx.repaymentCard.findFirst({ where: { applicationId, status: 'ACTIVE' } }))) return false;
+    await this.state.transitionApplication(tx, app, 'BOOKING_PENDING', actor);
+    return true;
   }
 
   async pollMandates(): Promise<number> {

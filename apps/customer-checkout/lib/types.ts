@@ -76,6 +76,8 @@ export interface View {
   offer?: Offer | null;
   documents?: FinancingDoc[];
   mandate?: { status: string; reference: string | null; failure: string | null } | null;
+  /** Backup repayment card from any bank (masked). */
+  repayment_card?: { status: 'NONE' | 'PENDING' | 'ACTIVE' | 'FAILED' | 'REPLACED'; required: boolean; last4?: string | null; card_type?: string | null; bank?: string | null; expires?: string | null; failure?: string | null } | null;
   vendor_payment?: { status: string; confirmed_at: string | null; simulated: boolean } | null;
   release?: { status: string; reference: string; authorized_at: string | null } | null;
   fulfilment?: Array<{ status: string; at: string; tracking_reference: string | null; carrier: string | null }>;

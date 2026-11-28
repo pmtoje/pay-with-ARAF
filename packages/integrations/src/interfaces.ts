@@ -247,6 +247,38 @@ export interface RepaymentMandateProvider {
   getStatus(mandateReference: string, ctx: CallContext): Promise<{ status: 'AWAITING_AUTHORIZATION' | 'ACTIVE' | 'FAILED' | 'CANCELLED'; failureCode?: string }>;
 }
 
+// ---- Backup repayment card (Paystack) -------------------------------------------------
+
+/** A card saved for later charges. The authorization code is a secret: store it encrypted. */
+export interface SavedCard {
+  authorizationCode: string;
+  reusable: boolean;
+  last4: string;
+  expMonth: string;
+  expYear: string;
+  cardType: string;
+  bank: string;
+  channel: string;
+  /** Same physical card across authorizations (lets the Bank spot one card used by many customers). */
+  signature: string | null;
+}
+
+export type CardTxnStatus = 'success' | 'failed' | 'pending' | 'not_found';
+
+export interface CardCollectionProvider {
+  readonly name: string;
+  /** Start a small card payment that saves the card; the customer completes it on the provider's page. */
+  startCardLink(input: { reference: string; email: string; amountKobo: bigint; callbackUrl: string; metadata: Record<string, string> }, ctx: CallContext): Promise<{ authorizationUrl: string }>;
+  /** Authoritative status of a card payment or charge by our reference (never trust the redirect). */
+  verify(reference: string, ctx: CallContext): Promise<{ status: CardTxnStatus; transactionId: string | null; amountKobo: bigint; card: SavedCard | null; gatewayResponse: string | null }>;
+  refund(transactionId: string, amountKobo: bigint, ctx: CallContext): Promise<{ status: 'pending' | 'processed' | 'failed' }>;
+  /**
+   * Charge a saved card. A TIMEOUT means the outcome is unknown: callers MUST verify by reference
+   * before any new attempt (never charge blindly twice).
+   */
+  charge(input: { authorizationCode: string; email: string; amountKobo: bigint; reference: string }, ctx: CallContext): Promise<{ status: 'success' | 'failed' | 'pending'; transactionId: string | null; gatewayResponse: string | null }>;
+}
+
 // ---- Vendor payments ------------------------------------------------------------------
 
 export interface PaymentBeneficiary {
@@ -299,6 +331,7 @@ export interface ProviderSet {
   periculum: StatementAnalysisProvider;
   araf: ArafWorkflowProvider;
   remita: RepaymentMandateProvider;
+  cards: CardCollectionProvider;
   payments: VendorPaymentProvider;
   notifications: NotificationProvider;
   malware: MalwareScanner;
