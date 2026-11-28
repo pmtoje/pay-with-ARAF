@@ -67,7 +67,7 @@ export function deriveCustomerStatus(state: ApplicationState): CustomerStatus {
     case 'DOCUMENTATION_PENDING':
       return C('TRACK', 'Financing approved — documents required', 'Review and sign your financing documents.', 'action');
     case 'MANDATE_PENDING':
-      return C('TRACK', 'Set up your repayment mandate', 'Authorise your repayment mandate to continue.', 'action');
+      return C('TRACK', 'Set up your repayments', 'Authorise your direct debit and add a backup debit card to continue.', 'action');
     case 'BOOKING_PENDING':
     case 'FINANCING_BOOKED':
     case 'VENDOR_PAYMENT_PENDING':
