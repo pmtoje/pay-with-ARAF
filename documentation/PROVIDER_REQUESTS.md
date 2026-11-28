@@ -109,9 +109,12 @@ query, never re-sent.
 **Why:** customers link a debit card from any bank, charged only when their AltBank account is not funded.
 ARAF already uses Paystack.
 
+**Decided:** use **ARAF's Paystack secret keys** (test key for sandbox, live key for production), copied from
+ARAF's secrets manager into Pay with ARAF's `PAYSTACK_SECRET_KEY`. Pay with ARAF transactions are tagged
+`metadata.source = "pay-with-araf"`.
+
 **Ask for:**
-- Secret keys for Pay with ARAF (test, then live).
-- The settlement account.
+- Whoever manages ARAF's secrets to set `PAYSTACK_SECRET_KEY` on the Pay with ARAF deployments.
 - Confirmation that recurring `charge_authorization` is enabled.
 - Refund permissions for the ₦50 card check.
 

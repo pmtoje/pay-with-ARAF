@@ -336,8 +336,11 @@ every customer still has an **Alternative Bank account** (booking and the primar
     reference and never charged again blindly.
 * **Not built here:** deciding *when* an instalment is missed (the core-banking repayment schedule). Staff raise
   the charge today; automation can follow once core banking reports failed debits.
+* **Keys:** Pay with ARAF uses **ARAF's Paystack account and secret key** (decided 2026-11-28). Every
+  Pay with ARAF transaction carries `metadata.source = "pay-with-araf"` and the application reference, so the two
+  products are easy to separate in the Paystack dashboard and in reconciliation. The key is set as
+  `PAYSTACK_SECRET_KEY` from the secrets manager on each deployment, never committed.
 * **Open:**
-  - Paystack keys and settlement account.
   - Card-on-file and recurring-debit consent wording (Compliance).
   - Whether the ₦50 check can be waived for cards the customer already linked.
 

@@ -87,7 +87,7 @@ export class BackupCardService implements OnModuleInit {
     const c = this.callCtx(app);
     const res = await this.providers.call(app.environment, 'PAYSTACK', 'card_link_start', c, () =>
       this.providers.for(app.environment).cards.startCardLink(
-        { reference, email, amountKobo: amount, callbackUrl: `${this.config.CHECKOUT_BASE_URL}/c/${app.checkoutSessionId}/card/return?reference=${encodeURIComponent(reference)}`, metadata: { application_reference: app.reference, purpose: 'backup_repayment_card' } },
+        { reference, email, amountKobo: amount, callbackUrl: `${this.config.CHECKOUT_BASE_URL}/c/${app.checkoutSessionId}/card/return?reference=${encodeURIComponent(reference)}`, metadata: { source: 'pay-with-araf', application_reference: app.reference, purpose: 'backup_repayment_card' } },
         c,
       ),
     );
